@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.82.0",
+    "@neondatabase/serverless": "^1.0.2",
     "@vercel/blob": "^2.3.3",
     "@vercel/postgres": "^0.10.0",
     "better-sqlite3": "^12.8.0",
