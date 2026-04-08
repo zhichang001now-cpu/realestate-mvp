@@ -32,7 +32,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   if (!market.jreit_index) market.jreit_index = 1842;
 
   const compRows = await sql`SELECT AVG(cap_rate) as avg_cap_rate, AVG(price_per_tsubo) as avg_price_per_tsubo, AVG(rent_per_sqm) as avg_rent_per_sqm, COUNT(*) as sample_count FROM comparables WHERE prefecture = ${property.prefecture ?? '東京都'} AND property_type = ${property.property_type ?? 'office'}`;
-  const comparables = compRows[0] ?? { sample_count: 0 };
+  const comparables = (compRows[0] ?? { sample_count: 0 }) as any;
 
   const scores = scoreProperty(property, market as any, comparables, financing);
   const memo = await generateInvestmentMemo(property, scores, market, comparables);
