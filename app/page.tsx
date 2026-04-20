@@ -1,204 +1,261 @@
 'use client';
 import { useState, useEffect, useMemo } from 'react';
+import { useRouter } from 'next/navigation';
 
 interface Property {
   id: string;
   name: string;
-  address: string;
-  property_type: string;
+  address: string | null;
+  property_type: string | null;
+  asking_price: number | null;
+  cap_rate: number | null;
+  noi_current: number | null;
+  occupancy_rate: number | null;
+  year_built: number | null;
   overall_score: number | null;
+  acquisition_score: number | null;
+  levered_irr: number | null;
   acquisition_rec: string | null;
   valuation_status: string | null;
-  cap_rate: number | null;
-  asking_price: number | null;
-  doc_count: number;
+  created_at: string;
 }
 
-const TYPE_LABELS: Record<string, string> = {
-  office: 'オフィス', retail: '商業', residential: '住宅',
-  industrial: '工業', mixed: '複合',
-};
-const REC_CONFIG: Record<string, { label: string; bg: string; color: string }> = {
-  Aggressive: { label: '積極取得', bg: '#e0f2e9', color: '#166534' },
-  Cautious:   { label: '慎重',     bg: '#fef3c7', color: '#92400e' },
-  Pass:       { label: 'パス',     bg: '#fee2e2', color: '#991b1b' },
-};
-const VAL_CONFIG: Record<string, { label: string; bg: string; color: string }> = {
-  Undervalued: { label: '割安', bg: '#e0f2e9', color: '#166534' },
-  Fair:        { label: '適正', bg: '#eff6ff', color: '#1e40af' },
-  Overvalued:  { label: '割高', bg: '#fee2e2', color: '#991b1b' },
-};
+function scoreColor(v: number | null): string {
+  if (v === null) return 'text-gray-500';
+  if (v >= 0.3) return 'text-emerald-400';
+  if (v >= 0) return 'text-yellow-400';
+  return 'text-red-400';
+}
 
-function scoreColor(s: number | null) {
-  if (s === null) return '#94a3b8';
-  if (s >= 2) return '#16a34a';
-  if (s >= 0) return '#2563eb';
-  return '#dc2626';
+function scoreBg(v: number | null): string {
+  if (v === null) return 'bg-gray-800';
+  if (v >= 0.3) return 'bg-emerald-950 border-emerald-800';
+  if (v >= 0) return 'bg-yellow-950 border-yellow-800';
+  return 'bg-red-950 border-red-900';
+}
+
+function fmt(n: number | null, unit = ''): string {
+  if (n === null || n === undefined) return '—';
+  if (unit === '億円') return (n / 1e8).toFixed(2) + '億円';
+  if (unit === '%') return n.toFixed(2) + '%';
+  return n.toLocaleString() + unit;
+}
+
+function recBadge(rec: string | null) {
+  if (!rec) return null;
+  const map: Record<string, string> = {
+    Aggressive: 'bg-emerald-900 text-emerald-300 border border-emerald-700',
+    Cautious: 'bg-yellow-900 text-yellow-300 border border-yellow-700',
+    Pass: 'bg-red-900 text-red-300 border border-red-700',
+  };
+  return <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${map[rec] ?? 'bg-gray-800 text-gray-300'}`}>{rec}</span>;
 }
 
 export default function Dashboard() {
+  const router = useRouter();
   const [properties, setProperties] = useState<Property[]>([]);
-  const [showNew, setShowNew] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
-  const [creating, setCreating] = useState(false);
-  const [newProp, setNewProp] = useState({
-    name: '', address: '', prefecture: '東京都', city: '', property_type: 'office',
-  });
+  const [showAdd, setShowAdd] = useState(false);
+  const [newName, setNewName] = useState('');
+  const [newType, setNewType] = useState('マンション');
+  const [adding, setAdding] = useState(false);
 
-  const load = () => fetch('/api/properties').then(r => r.json()).then(setProperties).catch(() => {});
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    fetch('/api/properties')
+      .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); })
+      .then(setProperties)
+      .catch(e => setError(e.message))
+      .finally(() => setLoading(false));
+  }, []);
 
   const filtered = useMemo(() =>
     properties.filter(p =>
-      p.name.toLowerCase().includes(search.toLowerCase()) ||
-      (p.address ?? '').toLowerCase().includes(search.toLowerCase())
+      [p.name, p.address, p.property_type].some(f => f?.toLowerCase().includes(search.toLowerCase()))
     ), [properties, search]);
 
-  const create = async () => {
-    if (!newProp.name) return;
-    setCreating(true);
-    const res = await fetch('/api/properties', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(newProp),
-    });
-    const { id } = await res.json();
-    window.location.href = '/properties/' + id;
-  };
+  async function addProperty() {
+    if (!newName.trim()) return;
+    setAdding(true);
+    try {
+      const res = await fetch('/api/properties', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: newName.trim(), property_type: newType }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      const { id } = await res.json();
+      router.push(`/properties/${id}`);
+    } catch (e) {
+      alert('追加失敗: ' + (e as Error).message);
+    } finally {
+      setAdding(false);
+    }
+  }
+
+  const PROPERTY_TYPES = ['マンション', 'オフィス', 'ホテル', '物流施設', '商業施設', '土地', 'その他'];
 
   return (
-    <div style={{ minHeight: '100vh', background: '#f0f2f8', fontFamily: "'Hiragino Sans', 'Yu Gothic', sans-serif" }}>
-
-      {/* White navbar */}
-      <div style={{ background: 'white', borderBottom: '2px solid #4f46e5', padding: '0 32px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', height: 52 }}>
-        <div style={{ fontSize: 16, fontWeight: 800, color: '#1e1b4b', letterSpacing: '-0.03em' }}>
-          Realty<span style={{ color: '#4f46e5' }}>IQ</span>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 24 }}>
-          <span style={{ fontSize: 12, color: '#64748b' }}>ポートフォリオ</span>
-          <button onClick={() => setShowNew(v => !v)}
-            style={{ padding: '7px 16px', background: '#4f46e5', color: 'white', border: 'none', borderRadius: 8, fontSize: 12, cursor: 'pointer', fontWeight: 500 }}>
-            + 物件を追加
+    <div className="min-h-screen" style={{ background: 'var(--bg)' }}>
+      {/* Header */}
+      <header className="border-b sticky top-0 z-10" style={{ background: 'var(--surface)', borderColor: 'var(--border)' }}>
+        <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center font-bold text-sm">R</div>
+            <span className="font-semibold text-lg tracking-tight">RealtyIQ</span>
+            <span className="text-xs px-2 py-0.5 rounded bg-blue-900 text-blue-300 border border-blue-700">Beta</span>
+          </div>
+          <div className="flex items-center gap-3 flex-1 max-w-md">
+            <input
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="物件名・住所で検索..."
+              className="w-full px-3 py-1.5 rounded-lg text-sm"
+              style={{ background: 'var(--surface2)', border: '1px solid var(--border)', color: 'var(--text)' }}
+            />
+          </div>
+          <button
+            onClick={() => setShowAdd(true)}
+            className="px-4 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-sm font-medium transition-colors"
+          >
+            + 新規物件
           </button>
         </div>
-      </div>
+      </header>
 
-      {/* Purple search bar */}
-      <div style={{ background: 'linear-gradient(90deg, #4338ca, #6d28d9)', padding: '10px 32px', display: 'flex', alignItems: 'center', gap: 12 }}>
-        <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
-          <circle cx="5.5" cy="5.5" r="4" stroke="rgba(255,255,255,0.5)" strokeWidth="1.5"/>
-          <path d="M9 9L12 12" stroke="rgba(255,255,255,0.5)" strokeWidth="1.5" strokeLinecap="round"/>
-        </svg>
-        <input
-          placeholder="物件名・住所・エリアで検索..."
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          style={{ flex: 1, maxWidth: 360, background: 'rgba(255,255,255,0.12)', border: '0.5px solid rgba(255,255,255,0.2)', borderRadius: 7, padding: '7px 12px', color: 'white', fontSize: 12, outline: 'none' }}
-        />
-        <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', marginLeft: 'auto' }}>{filtered.length} 件登録</span>
-      </div>
-
-      {/* Main */}
-      <div style={{ maxWidth: 1100, margin: '24px auto', padding: '0 32px 48px' }}>
-
-        {/* New property form */}
-        {showNew && (
-          <div style={{ background: 'white', border: '0.5px solid #e2e8f0', borderRadius: 12, padding: 20, marginBottom: 16, boxShadow: '0 2px 12px rgba(79,70,229,0.06)' }}>
-            <p style={{ fontSize: 13, fontWeight: 600, color: '#1e1b4b', margin: '0 0 14px' }}>新規物件</p>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 9, marginBottom: 12 }}>
-              {[{ placeholder: '物件名 *', key: 'name' }, { placeholder: '住所', key: 'address' }, { placeholder: '市区町村', key: 'city' }].map(f => (
-                <input key={f.key} placeholder={f.placeholder}
-                  value={(newProp as any)[f.key]}
-                  onChange={e => setNewProp({ ...newProp, [f.key]: e.target.value })}
-                  style={{ border: '0.5px solid #e2e8f0', borderRadius: 8, padding: '8px 12px', fontSize: 13, outline: 'none', color: '#1e293b' }} />
-              ))}
-              <select value={newProp.property_type} onChange={e => setNewProp({ ...newProp, property_type: e.target.value })}
-                style={{ border: '0.5px solid #e2e8f0', borderRadius: 8, padding: '8px 12px', fontSize: 13, color: '#1e293b', background: 'white' }}>
-                <option value="office">オフィス</option>
-                <option value="retail">商業</option>
-                <option value="residential">住宅</option>
-                <option value="industrial">工業</option>
-                <option value="mixed">複合</option>
-              </select>
+      <main className="max-w-7xl mx-auto px-6 py-8">
+        {/* Stats bar */}
+        <div className="grid grid-cols-4 gap-4 mb-8">
+          {[
+            { label: '登録物件', value: properties.length },
+            { label: 'スコア済', value: properties.filter(p => p.overall_score !== null).length },
+            { label: 'Aggressive', value: properties.filter(p => p.acquisition_rec === 'Aggressive').length },
+            { label: '平均IRR', value: (() => {
+              const irrs = properties.filter(p => p.levered_irr !== null).map(p => p.levered_irr!);
+              return irrs.length ? (irrs.reduce((a, b) => a + b, 0) / irrs.length).toFixed(1) + '%' : '—';
+            })() },
+          ].map(s => (
+            <div key={s.label} className="rounded-xl p-4 border" style={{ background: 'var(--surface)', borderColor: 'var(--border)' }}>
+              <div className="text-2xl font-bold text-white">{s.value}</div>
+              <div className="text-xs mt-1" style={{ color: 'var(--muted)' }}>{s.label}</div>
             </div>
-            <div style={{ display: 'flex', gap: 8 }}>
-              <button onClick={create} disabled={creating || !newProp.name}
-                style={{ padding: '8px 18px', background: '#4f46e5', color: 'white', border: 'none', borderRadius: 8, fontSize: 13, cursor: 'pointer', fontWeight: 500, opacity: creating ? 0.7 : 1 }}>
-                {creating ? '作成中...' : '作成する'}
-              </button>
-              <button onClick={() => setShowNew(false)}
-                style={{ padding: '8px 14px', background: 'transparent', color: '#94a3b8', border: '0.5px solid #e2e8f0', borderRadius: 8, fontSize: 13, cursor: 'pointer' }}>
-                キャンセル
-              </button>
-            </div>
+          ))}
+        </div>
+
+        {loading && <div className="text-center py-20 text-gray-500">読み込み中...</div>}
+        {error && <div className="rounded-xl p-4 bg-red-950 border border-red-800 text-red-300 mb-4">エラー: {error}</div>}
+
+        {!loading && !error && filtered.length === 0 && (
+          <div className="text-center py-20">
+            <div className="text-5xl mb-4">🏢</div>
+            <div className="text-gray-400 mb-2">{search ? '検索結果なし' : '物件がまだ登録されていません'}</div>
+            {!search && <button onClick={() => setShowAdd(true)} className="text-blue-400 underline text-sm">最初の物件を追加する</button>}
           </div>
         )}
 
-        {/* Table */}
-        <div style={{ background: 'white', border: '0.5px solid #e2e8f0', borderRadius: 12, overflow: 'hidden', boxShadow: '0 2px 12px rgba(79,70,229,0.05)' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead>
-              <tr style={{ background: '#fafbff' }}>
-                {['物件名', '用途', '想定価格', 'Cap rate', 'バリュエーション', 'スコア', '推奨', '書類'].map(h => (
-                  <th key={h} style={{
-                    padding: '10px 16px',
-                    textAlign: h === '物件名' || h === '用途' ? 'left' : 'center',
-                    fontSize: 10, color: '#94a3b8', fontWeight: 500, letterSpacing: '.06em',
-                    borderBottom: '0.5px solid #f1f5f9',
-                  }}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((p, i) => (
-                <tr key={p.id}
-                  onClick={() => window.location.href = '/properties/' + p.id}
-                  style={{ borderBottom: i < filtered.length - 1 ? '0.5px solid #f8fafc' : 'none', cursor: 'pointer' }}
-                  onMouseEnter={e => (e.currentTarget.style.background = '#fafbff')}
-                  onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
-                  <td style={{ padding: '13px 16px' }}>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: '#1e1b4b' }}>{p.name}</div>
-                    <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>{p.address}</div>
-                  </td>
-                  <td style={{ padding: '13px 16px', fontSize: 12, color: '#64748b' }}>{TYPE_LABELS[p.property_type] ?? p.property_type}</td>
-                  <td style={{ padding: '13px 16px', textAlign: 'center', fontSize: 13, color: '#334155', fontWeight: 500 }}>
-                    {p.asking_price ? '¥' + (p.asking_price / 1e8).toFixed(1) + '億' : <span style={{ color: '#e2e8f0' }}>—</span>}
-                  </td>
-                  <td style={{ padding: '13px 16px', textAlign: 'center', fontSize: 13, color: '#334155' }}>
-                    {p.cap_rate ? p.cap_rate.toFixed(1) + '%' : <span style={{ color: '#e2e8f0' }}>—</span>}
-                  </td>
-                  <td style={{ padding: '13px 16px', textAlign: 'center' }}>
-                    {p.valuation_status && VAL_CONFIG[p.valuation_status]
-                      ? <span style={{ fontSize: 11, padding: '3px 10px', borderRadius: 20, background: VAL_CONFIG[p.valuation_status].bg, color: VAL_CONFIG[p.valuation_status].color, fontWeight: 500 }}>
-                          {VAL_CONFIG[p.valuation_status].label}
-                        </span>
-                      : <span style={{ color: '#cbd5e1', fontSize: 12 }}>未分析</span>}
-                  </td>
-                  <td style={{ padding: '13px 16px', textAlign: 'center' }}>
-                    <span style={{ fontSize: 17, fontWeight: 700, color: scoreColor(p.overall_score) }}>
-                      {p.overall_score != null
-                        ? (p.overall_score > 0 ? '+' + p.overall_score : p.overall_score)
-                        : <span style={{ color: '#e2e8f0', fontSize: 13, fontWeight: 400 }}>—</span>}
-                    </span>
-                  </td>
-                  <td style={{ padding: '13px 16px', textAlign: 'center' }}>
-                    {p.acquisition_rec && REC_CONFIG[p.acquisition_rec]
-                      ? <span style={{ fontSize: 11, padding: '3px 10px', borderRadius: 20, background: REC_CONFIG[p.acquisition_rec].bg, color: REC_CONFIG[p.acquisition_rec].color, fontWeight: 500 }}>
-                          {REC_CONFIG[p.acquisition_rec].label}
-                        </span>
-                      : null}
-                  </td>
-                  <td style={{ padding: '13px 16px', textAlign: 'center', fontSize: 12, color: '#94a3b8' }}>{p.doc_count || '—'}</td>
-                </tr>
-              ))}
-              {filtered.length === 0 && (
-                <tr><td colSpan={8} style={{ padding: '52px 16px', textAlign: 'center', color: '#cbd5e1', fontSize: 13 }}>
-                  {search ? `「${search}」に一致する物件が見つかりません` : '上の「物件を追加」から始めてください'}
-                </td></tr>
-              )}
-            </tbody>
-          </table>
+        {/* Property grid */}
+        <div className="grid gap-4">
+          {filtered.map(p => (
+            <div
+              key={p.id}
+              onClick={() => router.push(`/properties/${p.id}`)}
+              className="rounded-xl border cursor-pointer hover:border-blue-600 transition-all group"
+              style={{ background: 'var(--surface)', borderColor: 'var(--border)' }}
+            >
+              <div className="p-5 flex items-center gap-6">
+                {/* Score badge */}
+                <div className={`w-16 h-16 rounded-xl flex flex-col items-center justify-center border shrink-0 ${scoreBg(p.overall_score)}`}>
+                  <span className={`text-xl font-bold ${scoreColor(p.overall_score)}`}>
+                    {p.overall_score !== null ? (p.overall_score > 0 ? '+' : '') + p.overall_score.toFixed(1) : '—'}
+                  </span>
+                  <span className="text-xs mt-0.5" style={{ color: 'var(--muted)' }}>総合</span>
+                </div>
+
+                {/* Name + address */}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="font-semibold text-base group-hover:text-blue-300 transition-colors truncate">{p.name}</span>
+                    {recBadge(p.acquisition_rec)}
+                    {p.valuation_status === 'Undervalued' && <span className="text-xs px-1.5 py-0.5 rounded bg-purple-900 text-purple-300 border border-purple-700">割安</span>}
+                  </div>
+                  <div className="text-sm" style={{ color: 'var(--muted)' }}>
+                    {[p.property_type, p.address].filter(Boolean).join(' · ') || '住所未登録'}
+                  </div>
+                </div>
+
+                {/* Key metrics */}
+                <div className="hidden md:grid grid-cols-4 gap-6 text-right shrink-0">
+                  <div>
+                    <div className="text-xs mb-1" style={{ color: 'var(--muted)' }}>取得価格</div>
+                    <div className="text-sm font-medium">{fmt(p.asking_price, '億円')}</div>
+                  </div>
+                  <div>
+                    <div className="text-xs mb-1" style={{ color: 'var(--muted)' }}>Cap Rate</div>
+                    <div className="text-sm font-medium">{fmt(p.cap_rate, '%')}</div>
+                  </div>
+                  <div>
+                    <div className="text-xs mb-1" style={{ color: 'var(--muted)' }}>稼働率</div>
+                    <div className="text-sm font-medium">{fmt(p.occupancy_rate, '%')}</div>
+                  </div>
+                  <div>
+                    <div className="text-xs mb-1" style={{ color: 'var(--muted)' }}>レバIRR</div>
+                    <div className={`text-sm font-medium ${p.levered_irr !== null && p.levered_irr >= 8 ? 'text-emerald-400' : ''}`}>
+                      {fmt(p.levered_irr, '%')}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))}
         </div>
-      </div>
+      </main>
+
+      {/* Add property modal */}
+      {showAdd && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.7)' }}>
+          <div className="rounded-2xl p-6 w-full max-w-sm mx-4" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
+            <h2 className="text-lg font-semibold mb-4">新規物件を追加</h2>
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs mb-1 block" style={{ color: 'var(--muted)' }}>物件名 *</label>
+                <input
+                  value={newName}
+                  onChange={e => setNewName(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && addProperty()}
+                  placeholder="例: 渋谷区マンション A棟"
+                  className="w-full px-3 py-2 rounded-lg text-sm"
+                  style={{ background: 'var(--surface2)', border: '1px solid var(--border)', color: 'var(--text)' }}
+                  autoFocus
+                />
+              </div>
+              <div>
+                <label className="text-xs mb-1 block" style={{ color: 'var(--muted)' }}>物件種別</label>
+                <select
+                  value={newType}
+                  onChange={e => setNewType(e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg text-sm"
+                  style={{ background: 'var(--surface2)', border: '1px solid var(--border)', color: 'var(--text)' }}
+                >
+                  {PROPERTY_TYPES.map(t => <option key={t}>{t}</option>)}
+                </select>
+              </div>
+            </div>
+            <div className="flex gap-2 mt-5">
+              <button
+                onClick={() => { setShowAdd(false); setNewName(''); }}
+                className="flex-1 py-2 rounded-lg text-sm border"
+                style={{ borderColor: 'var(--border)', color: 'var(--muted)' }}
+              >キャンセル</button>
+              <button
+                onClick={addProperty}
+                disabled={!newName.trim() || adding}
+                className="flex-1 py-2 rounded-lg text-sm bg-blue-600 hover:bg-blue-500 font-medium disabled:opacity-50 transition-colors"
+              >{adding ? '追加中...' : '追加して詳細へ'}</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

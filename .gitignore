@@ -39,3 +39,16 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# macOS metadata
+._*
+.DS_Store
+
+# Local env
+.env.local
+
+# Data uploads
+data/uploads/
+data/*.db
+data/*.db-shm
+data/*.db-wal

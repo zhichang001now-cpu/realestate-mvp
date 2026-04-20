@@ -1,26 +1,33 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getDb, initSchema } from '@/lib/db';
+import { getDb } from '@/lib/db';
 
 export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
-  await initSchema();
   const sql = getDb();
-  const rows = await sql`
-    SELECT p.*, pe.address_extracted, pe.station, pe.walk_minutes, pe.land_sqm, pe.building_sqm,
-      pe.floors, pe.year_built, pe.usage_type, pe.structure, pe.asking_price, pe.noi,
-      pe.noi_full_occupancy, pe.noi_current, pe.cap_rate, pe.surface_yield, pe.occupancy_rate,
-      pe.gross_rent, pe.rent_per_sqm, pe.price_per_sqm, pe.price_per_tsubo, pe.unit_count,
-      pe.parking_count, pe.land_right_type, pe.land_lease_monthly, pe.land_lease_expiry,
-      pe.fixed_asset_tax, pe.management_fee, pe.special_notes, pe.raw_all_fields, pe.extraction_confidence,
-      ps.overall_score, ps.acquisition_score, ps.disposition_score, ps.development_score,
-      ps.leasing_score, ps.financing_score, ps.acquisition_rec, ps.disposition_rec,
-      ps.development_rec, ps.financing_rec, ps.irr, ps.levered_irr, ps.yield_on_cost,
-      ps.valuation_status, ps.investment_memo
-    FROM properties p
-    LEFT JOIN property_extractions pe ON pe.property_id = p.id
-    LEFT JOIN property_scores ps ON ps.property_id = p.id
-    WHERE p.id = ${params.id}
-    ORDER BY pe.created_at DESC, ps.scored_at DESC LIMIT 1
+  const [property] = await sql`SELECT * FROM properties WHERE id = ${params.id}`;
+  if (!property) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+
+  const [extraction] = await sql`
+    SELECT * FROM property_extractions WHERE property_id = ${params.id}
+    ORDER BY created_at DESC LIMIT 1
   `;
-  if (!rows[0]) return NextResponse.json({ error: 'Not found' }, { status: 404 });
-  return NextResponse.json(rows[0]);
+  const [score] = await sql`
+    SELECT * FROM property_scores WHERE property_id = ${params.id}
+    ORDER BY scored_at DESC LIMIT 1
+  `;
+  const documents = await sql`
+    SELECT * FROM property_documents WHERE property_id = ${params.id}
+    ORDER BY created_at DESC
+  `;
+  const marketRows = await sql`
+    SELECT DISTINCT ON (data_type) data_type, value, unit, source, recorded_at
+    FROM market_data ORDER BY data_type, recorded_at DESC
+  `;
+
+  return NextResponse.json({ property, extraction: extraction ?? null, score: score ?? null, documents, marketRows });
+}
+
+export async function DELETE(_req: NextRequest, { params }: { params: { id: string } }) {
+  const sql = getDb();
+  await sql`UPDATE properties SET status = 'deleted' WHERE id = ${params.id}`;
+  return NextResponse.json({ ok: true });
 }

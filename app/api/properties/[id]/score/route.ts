@@ -1,44 +1,81 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getDb, generateId, initSchema } from '@/lib/db';
-import { scoreProperty, DEFAULT_FINANCING, FinancingParams } from '@/lib/scoring';
+import { getDb, generateId, migrateSchema, migrateScoreColumns } from '@/lib/db';
+import { scoreProperty, DEFAULT_FINANCING, type FinancingParams } from '@/lib/scoring';
+import { snapshotFromRows } from '@/lib/market';
 import { generateInvestmentMemo } from '@/lib/memo';
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
-  await initSchema();
+  await migrateSchema();
+  await migrateScoreColumns();
+
   const sql = getDb();
-  let financing: FinancingParams = DEFAULT_FINANCING;
-  try {
-    const body = await req.json();
-    if (body.financing) financing = {
-      equity_ratio: parseFloat(body.financing.equity_ratio) || DEFAULT_FINANCING.equity_ratio,
-      loan_rate: parseFloat(body.financing.loan_rate) || DEFAULT_FINANCING.loan_rate,
-      loan_years: parseInt(body.financing.loan_years) || DEFAULT_FINANCING.loan_years,
-      hold_years: parseInt(body.financing.hold_years) || DEFAULT_FINANCING.hold_years,
-    };
-  } catch {}
 
-  const rows = await sql`SELECT p.*, pe.* FROM properties p LEFT JOIN property_extractions pe ON pe.property_id = p.id WHERE p.id = ${params.id} ORDER BY pe.created_at DESC LIMIT 1`;
-  const property = rows[0];
-  if (!property) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+  const [property] = await sql`SELECT * FROM properties WHERE id = ${params.id}`;
+  if (!property) return NextResponse.json({ error: 'Property not found' }, { status: 404 });
 
-  const marketRows = await sql`SELECT DISTINCT ON (data_type) data_type, value FROM market_data ORDER BY data_type, recorded_at DESC`;
-  const market: Record<string, number> = {};
-  for (const r of marketRows) market[r.data_type] = r.value;
-  if (!market.jpn_10y) market.jpn_10y = 1.05;
-  if (!market.us_10y)  market.us_10y  = 4.22;
-  if (!market.usdjpy)  market.usdjpy  = 149.5;
-  if (!market.cnyjpy)  market.cnyjpy  = 20.5;
-  if (!market.chn_10y) market.chn_10y = 1.65;
-  if (!market.jreit_index) market.jreit_index = 1842;
+  const [extraction] = await sql`
+    SELECT * FROM property_extractions WHERE property_id = ${params.id}
+    ORDER BY created_at DESC LIMIT 1
+  `;
+  if (!extraction) return NextResponse.json({ error: 'No extraction data yet — upload a document first' }, { status: 400 });
 
-  const compRows = await sql`SELECT AVG(cap_rate) as avg_cap_rate, AVG(price_per_tsubo) as avg_price_per_tsubo, AVG(rent_per_sqm) as avg_rent_per_sqm, COUNT(*) as sample_count FROM comparables WHERE prefecture = ${property.prefecture ?? '東京都'} AND property_type = ${property.property_type ?? 'office'}`;
-  const comparables = (compRows[0] ?? { sample_count: 0 }) as any;
+  const marketRows = await sql`
+    SELECT DISTINCT ON (data_type) data_type, value
+    FROM market_data ORDER BY data_type, recorded_at DESC
+  `;
+  const market = snapshotFromRows(marketRows as { data_type: string; value: number }[]);
 
-  const scores = scoreProperty(property, market as any, comparables, financing);
-  const memo = await generateInvestmentMemo(property, scores, market, comparables);
-  const sid = generateId();
+  const compRows = await sql`
+    SELECT AVG(cap_rate) as avg_cap_rate, AVG(rent_per_sqm) as avg_rent_per_sqm,
+           AVG(price_per_tsubo) as avg_price_per_tsubo, COUNT(*) as sample_count
+    FROM comparables WHERE prefecture = ${property.prefecture ?? ''} AND property_type = ${property.property_type ?? ''}
+  `;
+  const comp = {
+    avg_cap_rate: (compRows[0]?.avg_cap_rate as number) ?? undefined,
+    avg_rent_per_sqm: (compRows[0]?.avg_rent_per_sqm as number) ?? undefined,
+    avg_price_per_tsubo: (compRows[0]?.avg_price_per_tsubo as number) ?? undefined,
+    sample_count: Number(compRows[0]?.sample_count ?? 0),
+  };
 
-  await sql`INSERT INTO property_scores (id, property_id, acquisition_score, disposition_score, development_score, leasing_score, financing_score, overall_score, acquisition_rec, disposition_rec, development_rec, financing_rec, irr, levered_irr, yield_on_cost, valuation_status, investment_memo, market_data_snapshot) VALUES (${sid}, ${params.id}, ${scores.acquisition_score}, ${scores.disposition_score}, ${scores.development_score}, ${scores.leasing_score}, ${scores.financing_score}, ${scores.overall_score}, ${scores.acquisition_rec}, ${scores.disposition_rec}, ${scores.development_rec}, ${scores.financing_rec}, ${scores.irr}, ${scores.levered_irr}, ${scores.yield_on_cost}, ${scores.valuation_status}, ${memo}, ${JSON.stringify(market)})`;
+  const body = await req.json().catch(() => ({}));
+  const financing: FinancingParams = {
+    equity_ratio: body.equity_ratio ?? DEFAULT_FINANCING.equity_ratio,
+    loan_rate:    body.loan_rate    ?? DEFAULT_FINANCING.loan_rate,
+    loan_years:   body.loan_years   ?? DEFAULT_FINANCING.loan_years,
+    hold_years:   body.hold_years   ?? DEFAULT_FINANCING.hold_years,
+  };
 
-  return NextResponse.json({ ...scores, investment_memo: memo });
+  const mergedProperty = { ...property, ...extraction };
+  const scores = scoreProperty(mergedProperty, market, comp, financing);
+
+  const memo = await generateInvestmentMemo(
+    mergedProperty,
+    scores as unknown as Record<string, unknown>,
+    market as unknown as Record<string, unknown>
+  ).catch(() => '');
+
+  const scoreId = generateId();
+  await sql`
+    INSERT INTO property_scores (
+      id, property_id,
+      acquisition_score, disposition_score, development_score, leasing_score, financing_score, overall_score,
+      acquisition_rec, disposition_rec, development_rec, financing_rec,
+      irr, levered_irr, annual_debt_service, annual_cashflow, equity_amount, loan_amount, payback_years,
+      dscr, yield_on_cost, valuation_status,
+      dscr_veto, land_reg_warning, industrial_opportunity, industrial_hub,
+      investment_memo, market_data_snapshot
+    ) VALUES (
+      ${scoreId}, ${params.id},
+      ${scores.acquisition_score}, ${scores.disposition_score}, ${scores.development_score},
+      ${scores.leasing_score}, ${scores.financing_score}, ${scores.overall_score},
+      ${scores.acquisition_rec}, ${scores.disposition_rec}, ${scores.development_rec}, ${scores.financing_rec},
+      ${scores.irr}, ${scores.levered_irr}, ${scores.annual_debt_service}, ${scores.annual_cashflow},
+      ${scores.equity_amount}, ${scores.loan_amount}, ${scores.payback_years},
+      ${scores.dscr}, ${scores.yield_on_cost}, ${scores.valuation_status},
+      ${scores.dscr_veto}, ${scores.land_reg_warning}, ${scores.industrial_opportunity}, ${scores.industrial_hub ?? null},
+      ${memo}, ${JSON.stringify(market)}
+    )
+  `;
+
+  return NextResponse.json({ scores, memo, market });
 }
