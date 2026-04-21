@@ -262,9 +262,9 @@ export function scoreProperty(
     LAND_REG_CITIES.has(city);
 
   // ── 産業立地 opportunity ────────────────────────────────────────────────────
-  const hubMatch = INDUSTRIAL_HUBS.find(h =>
-    city.includes(h.city) || h.city.includes(city)
-  );
+  const hubMatch = city.trim()
+    ? INDUSTRIAL_HUBS.find(h => city.includes(h.city) || h.city.includes(city))
+    : undefined;
   const industrialOpportunity = !!hubMatch && (hubMatch.types.includes(propType) || propType === 'その他');
   const industrialHub = hubMatch?.hub ?? null;
 

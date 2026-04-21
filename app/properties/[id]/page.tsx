@@ -318,7 +318,7 @@ export default function PropertyDetail() {
               </div>
               {extraction.special_notes && (
                 <div className="mt-4 p-3 rounded-lg text-sm" style={{ background: 'var(--surface2)', color: 'var(--muted)' }}>
-                  <span className="font-medium text-white">備考: </span>{extraction.special_notes}
+                  <span className="font-medium text-white">{t('detail.notes')}: </span>{extraction.special_notes}
                 </div>
               )}
             </section>
@@ -329,11 +329,11 @@ export default function PropertyDetail() {
             <section className="rounded-xl border p-5" style={{ background: 'var(--surface)', borderColor: 'var(--border)' }}>
               <h2 className="text-sm font-semibold uppercase tracking-wider mb-4" style={{ color: 'var(--muted)' }}>{t('detail.section.scores')}</h2>
               <div className="space-y-4">
-                <ScoreBar label="取得 (Acquisition)" value={score.acquisition_score} rec={score.acquisition_rec} />
-                <ScoreBar label="売却 (Disposition)" value={score.disposition_score} rec={score.disposition_rec} />
-                <ScoreBar label="開発 (Development)" value={score.development_score} rec={score.development_rec} />
-                <ScoreBar label="リーシング (Leasing)" value={score.leasing_score} />
-                <ScoreBar label="ファイナンス (Financing)" value={score.financing_score} rec={score.financing_rec} />
+                <ScoreBar label={t('axis.acquisition')} value={score.acquisition_score} rec={score.acquisition_rec} />
+                <ScoreBar label={t('axis.disposition')} value={score.disposition_score} rec={score.disposition_rec} />
+                <ScoreBar label={t('axis.development')} value={score.development_score} rec={score.development_rec} />
+                <ScoreBar label={t('axis.leasing')} value={score.leasing_score} />
+                <ScoreBar label={t('axis.financing')} value={score.financing_score} rec={score.financing_rec} />
               </div>
             </section>
           )}
