@@ -91,5 +91,17 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
   await sql`UPDATE property_documents SET extracted_at = NOW() WHERE id = ${docId}`;
 
+  // Update properties.prefecture and properties.city from extracted address
+  if (extraction.address_extracted) {
+    const addr = extraction.address_extracted as string;
+    const prefMatch = addr.match(/^(.+?[都道府県])/);
+    const cityMatch = addr.match(/[都道府県](.+?[市区町村])/);
+    const pref = prefMatch?.[1] ?? null;
+    const city = cityMatch?.[1] ?? null;
+    if (pref || city) {
+      await sql`UPDATE properties SET prefecture = ${pref}, city = ${city} WHERE id = ${params.id}`;
+    }
+  }
+
   return NextResponse.json({ docId, extraction }, { status: 201 });
 }

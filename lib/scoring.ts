@@ -23,6 +23,7 @@ export interface PropertyData {
   building_sqm?: number;
   prefecture?: string;
   city?: string;
+  address_extracted?: string;
 }
 
 export interface FinancingParams {
@@ -256,7 +257,12 @@ export function scoreProperty(
 
   // ── 土地利用規制法 check ────────────────────────────────────────────────────
   const prefecture = property.prefecture ?? '';
-  const city = property.city ?? '';
+  // city: use explicit field, or parse from address_extracted
+  const _rawCity = property.city ?? (() => {
+    const m = (property.address_extracted ?? '').match(/[都道府県](.+?[市区町村])/);
+    return m?.[1] ?? '';
+  })();
+  const city = _rawCity;
   const landRegWarning =
     LAND_REG_PREFECTURES.has(prefecture) ||
     LAND_REG_CITIES.has(city);
