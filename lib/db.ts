@@ -46,7 +46,7 @@ export async function initSchema() {
     land_right_type TEXT, land_lease_monthly REAL, land_lease_expiry TEXT,
     fixed_asset_tax REAL, management_fee REAL, other_expenses REAL, total_expenses REAL,
     tenant_summary TEXT, lease_expiry_risk TEXT, special_notes TEXT,
-    raw_all_fields TEXT, extraction_confidence REAL,
+    raw_all_fields TEXT, extraction_confidence REAL, postal_code TEXT,
     manually_verified INTEGER DEFAULT 0,
     raw_extraction TEXT,
     created_at TIMESTAMPTZ DEFAULT NOW()
@@ -86,6 +86,11 @@ export async function migrateSchema() {
   for (const col of cols) {
     await sql`ALTER TABLE property_scores ADD COLUMN IF NOT EXISTS ${sql.unsafe(col)} REAL`.catch(() => {});
   }
+}
+
+export async function migrateExtractionColumns() {
+  const sql = getDb();
+  await sql`ALTER TABLE property_extractions ADD COLUMN IF NOT EXISTS postal_code TEXT`.catch(() => {});
 }
 
 export async function migrateScoreColumns() {

@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getDb, generateId, initSchema } from '@/lib/db';
+import { getDb, generateId, initSchema, migrateExtractionColumns } from '@/lib/db';
 
 const EXTRACTION_PROMPT = `Extract all data from this Japanese real estate document.
 Rules: 令和X年=2018+X, 平成X年=1988+X, 昭和X年=1925+X. 億円×100000000, 万円×10000.
 Extract both 満室想定(noi_full_occupancy) and 現況(noi_current).
 Return ONLY valid JSON with NO markdown fences:
-{"address_extracted":null,"station":null,"walk_minutes":null,"land_sqm":null,"building_sqm":null,"floors":null,"year_built":null,"usage_type":null,"structure":null,"asking_price":null,"noi_full_occupancy":null,"noi_current":null,"noi":null,"cap_rate":null,"surface_yield":null,"occupancy_rate":null,"gross_rent":null,"rent_per_sqm":null,"price_per_sqm":null,"price_per_tsubo":null,"unit_count":null,"parking_count":null,"land_right_type":null,"land_lease_monthly":null,"land_lease_expiry":null,"fixed_asset_tax":null,"management_fee":null,"other_expenses":null,"total_expenses":null,"tenant_summary":[],"lease_expiry_risk":"low","special_notes":null,"raw_all_fields":{},"extraction_confidence":0.5}`;
+{"address_extracted":null,"station":null,"walk_minutes":null,"land_sqm":null,"building_sqm":null,"floors":null,"year_built":null,"usage_type":null,"structure":null,"asking_price":null,"noi_full_occupancy":null,"noi_current":null,"noi":null,"cap_rate":null,"surface_yield":null,"occupancy_rate":null,"gross_rent":null,"rent_per_sqm":null,"price_per_sqm":null,"price_per_tsubo":null,"unit_count":null,"parking_count":null,"land_right_type":null,"land_lease_monthly":null,"land_lease_expiry":null,"fixed_asset_tax":null,"management_fee":null,"other_expenses":null,"total_expenses":null,"tenant_summary":[],"lease_expiry_risk":"low","special_notes":null,"postal_code":null,"raw_all_fields":{},"extraction_confidence":0.5}`;
 
 function parseExtractionJson(text: string): Record<string, unknown> {
   // Strip markdown code fences if present
@@ -19,6 +19,7 @@ function parseExtractionJson(text: string): Record<string, unknown> {
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   await initSchema();
+  await migrateExtractionColumns();
   const sql = getDb();
 
   const formData = await req.formData();
@@ -72,7 +73,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       land_right_type, land_lease_monthly, land_lease_expiry,
       fixed_asset_tax, management_fee, other_expenses, total_expenses,
       tenant_summary, lease_expiry_risk, special_notes,
-      raw_all_fields, extraction_confidence, raw_extraction
+      raw_all_fields, extraction_confidence, postal_code, raw_extraction
     ) VALUES (
       ${eid}, ${params.id}, ${docId},
       ${extraction.address_extracted ?? null}, ${extraction.station ?? null}, ${extraction.walk_minutes ?? null},
@@ -85,7 +86,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       ${extraction.land_right_type ?? null}, ${extraction.land_lease_monthly ?? null}, ${extraction.land_lease_expiry ?? null},
       ${extraction.fixed_asset_tax ?? null}, ${extraction.management_fee ?? null}, ${extraction.other_expenses ?? null}, ${extraction.total_expenses ?? null},
       ${JSON.stringify(extraction.tenant_summary ?? [])}, ${extraction.lease_expiry_risk ?? 'low'}, ${extraction.special_notes ?? null},
-      ${JSON.stringify(extraction.raw_all_fields ?? {})}, ${extraction.extraction_confidence ?? 0.5}, ${JSON.stringify(extraction)}
+      ${JSON.stringify(extraction.raw_all_fields ?? {})}, ${extraction.extraction_confidence ?? 0.5}, ${(extraction.postal_code as string) ?? null}, ${JSON.stringify(extraction)}
     )
   `;
 

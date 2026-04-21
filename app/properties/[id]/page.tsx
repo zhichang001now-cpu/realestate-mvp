@@ -27,6 +27,12 @@ interface Score {
   dscr_veto: boolean; land_reg_warning: boolean; industrial_opportunity: boolean; industrial_hub: string | null;
 }
 interface MarketRow { data_type: string; value: number; unit: string; }
+interface CompData {
+  sampleCount: number; avgUnitPriceSqm: number; avgPriceTsubo: number;
+  minUnitPrice: number; maxUnitPrice: number; medianUnitPrice: number;
+  subjectUnitPriceSqm: number | null; subjectPriceTsubo: number | null;
+  prefecture: string; city: string;
+}
 interface Document { id: string; filename: string; doc_type: string; extracted_at: string | null; created_at: string; }
 
 function fmtVal(n: number | null | undefined, unit = '', digits = 2): string {
@@ -88,6 +94,9 @@ export default function PropertyDetail() {
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [scoring, setScoring] = useState(false);
   const [refreshingMarket, setRefreshingMarket] = useState(false);
+  const [comp, setComp] = useState<CompData | null>(null);
+  const [compLoading, setCompLoading] = useState(false);
+  const [compError, setCompError] = useState<string | null>(null);
 
   const [equityRatio, setEquityRatio] = useState(40);
   const [loanRate, setLoanRate] = useState(1.65);
@@ -106,6 +115,7 @@ export default function PropertyDetail() {
       setProperty(data.property);
       setExtraction(data.extraction);
       setScore(data.score);
+      fetchComp();
       setMarketRows(data.marketRows ?? []);
       setDocuments(data.documents ?? []);
     } catch (e) { setError((e as Error).message); }
@@ -140,6 +150,17 @@ export default function PropertyDetail() {
       await load();
     } catch (e) { alert((e as Error).message); }
     finally { setScoring(false); }
+  }
+
+  async function fetchComp() {
+    if (!id) return;
+    setCompLoading(true); setCompError(null);
+    try {
+      const res = await fetch(`/api/market/comparable?property_id=${id}`);
+      if (!res.ok) { const e = await res.json(); setCompError(e.error ?? 'Error'); return; }
+      setComp(await res.json());
+    } catch { setCompError('Network error'); }
+    finally { setCompLoading(false); }
   }
 
   async function handleRefreshMarket() {

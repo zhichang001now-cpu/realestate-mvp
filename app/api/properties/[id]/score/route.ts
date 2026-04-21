@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb, generateId, migrateSchema, migrateScoreColumns } from '@/lib/db';
 import { scoreProperty, DEFAULT_FINANCING, type FinancingParams } from '@/lib/scoring';
+import { fetchMlitComparables } from '@/lib/comparable';
 import { snapshotFromRows } from '@/lib/market';
 import { generateInvestmentMemo } from '@/lib/memo';
 
@@ -25,16 +26,24 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   `;
   const market = snapshotFromRows(marketRows as { data_type: string; value: number }[]);
 
-  const compRows = await sql`
-    SELECT AVG(cap_rate) as avg_cap_rate, AVG(rent_per_sqm) as avg_rent_per_sqm,
-           AVG(price_per_tsubo) as avg_price_per_tsubo, COUNT(*) as sample_count
-    FROM comparables WHERE prefecture = ${property.prefecture ?? ''} AND property_type = ${property.property_type ?? ''}
-  `;
+  // Fetch MLIT comparable transactions
+  const askingPrice = (extraction as Record<string, unknown>).asking_price as number | null;
+  const buildingSqm = (extraction as Record<string, unknown>).building_sqm as number | null;
+  const subjectUnitPrice = (askingPrice && buildingSqm && buildingSqm > 0)
+    ? (askingPrice / buildingSqm) / 10000 : undefined;
+
+  const mlitComp = await fetchMlitComparables(
+    property.prefecture ?? '',
+    property.city ?? '',
+    property.property_type ?? 'マンション',
+    subjectUnitPrice,
+  ).catch(() => null);
+
   const comp = {
-    avg_cap_rate: (compRows[0]?.avg_cap_rate as number) ?? undefined,
-    avg_rent_per_sqm: (compRows[0]?.avg_rent_per_sqm as number) ?? undefined,
-    avg_price_per_tsubo: (compRows[0]?.avg_price_per_tsubo as number) ?? undefined,
-    sample_count: Number(compRows[0]?.sample_count ?? 0),
+    avg_cap_rate: undefined as number | undefined,
+    avg_rent_per_sqm: undefined as number | undefined,
+    avg_price_per_tsubo: mlitComp?.avgPriceTsubo,
+    sample_count: mlitComp?.sampleCount ?? 0,
   };
 
   const body = await req.json().catch(() => ({}));
