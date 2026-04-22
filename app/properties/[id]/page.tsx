@@ -29,7 +29,7 @@ interface Score {
   dscr_veto: boolean; land_reg_warning: boolean; industrial_opportunity: boolean; industrial_hub: string | null;
 }
 interface MarketRow { data_type: string; value: number; unit: string; }
-interface AreaNews { location: string; summary: string; }
+interface AreaNews { location: string; summary: string; source_title: string | null; source_url: string | null; }
 interface OshiResult {
   address: string; searchUrl: string; checked: boolean;
   hasRecord: boolean | null; status: 'clean' | 'record_found' | 'manual_check';
@@ -405,7 +405,16 @@ export default function PropertyDetail() {
             </div>
             {newsError && <div className="text-sm text-red-400 rounded-lg p-3 bg-red-950 border border-red-800">{newsError}</div>}
             {areaNews ? (
-              <p className="text-sm leading-relaxed">{areaNews.summary}</p>
+              <div className="space-y-2">
+                <p className="text-sm leading-relaxed">{areaNews.summary}</p>
+                {areaNews.source_url && (
+                  <a href={areaNews.source_url} target="_blank" rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-xs hover:underline"
+                    style={{ color: 'var(--muted)' }}>
+                    📰 {areaNews.source_title ?? areaNews.source_url} ↗
+                  </a>
+                )}
+              </div>
             ) : (
               !newsLoading && !newsError && (
                 <p className="text-sm" style={{ color: 'var(--muted)' }}>—</p>
