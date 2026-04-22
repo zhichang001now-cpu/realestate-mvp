@@ -27,6 +27,15 @@ interface Score {
   dscr_veto: boolean; land_reg_warning: boolean; industrial_opportunity: boolean; industrial_hub: string | null;
 }
 interface MarketRow { data_type: string; value: number; unit: string; }
+interface AreaFinding {
+  category: string; title: string; summary: string;
+  impact: 'positive' | 'neutral' | 'negative'; timeframe: string | null; source?: string;
+}
+interface AreaNews { location: string; findings: AreaFinding[]; overall: string; }
+interface OshiResult {
+  address: string; searchUrl: string; checked: boolean;
+  hasRecord: boolean | null; status: 'clean' | 'record_found' | 'manual_check';
+}
 interface CompData {
   sampleCount: number; avgUnitPriceSqm: number; avgPriceTsubo: number;
   minUnitPrice: number; maxUnitPrice: number; medianUnitPrice: number;
@@ -97,6 +106,11 @@ export default function PropertyDetail() {
   const [comp, setComp] = useState<CompData | null>(null);
   const [compLoading, setCompLoading] = useState(false);
   const [compError, setCompError] = useState<string | null>(null);
+  const [areaNews, setAreaNews] = useState<AreaNews | null>(null);
+  const [newsLoading, setNewsLoading] = useState(false);
+  const [newsError, setNewsError] = useState<string | null>(null);
+  const [oshi, setOshi] = useState<OshiResult | null>(null);
+  const [oshiLoading, setOshiLoading] = useState(false);
 
   const [equityRatio, setEquityRatio] = useState(40);
   const [loanRate, setLoanRate] = useState(1.65);
@@ -161,6 +175,27 @@ export default function PropertyDetail() {
       setComp(await res.json());
     } catch { setCompError('Network error'); }
     finally { setCompLoading(false); }
+  }
+
+  async function fetchAreaNews() {
+    if (!id) return;
+    setNewsLoading(true); setNewsError(null);
+    try {
+      const res = await fetch(`/api/properties/${id}/area-news`);
+      if (!res.ok) { const e = await res.json(); setNewsError(e.error ?? 'Error'); return; }
+      setAreaNews(await res.json());
+    } catch { setNewsError('Network error'); }
+    finally { setNewsLoading(false); }
+  }
+
+  async function fetchOshimaland() {
+    if (!id) return;
+    setOshiLoading(true);
+    try {
+      const res = await fetch(`/api/properties/${id}/oshimaland`);
+      if (res.ok) setOshi(await res.json());
+    } catch { /* silent */ }
+    finally { setOshiLoading(false); }
   }
 
   async function handleRefreshMarket() {
