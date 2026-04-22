@@ -275,7 +275,7 @@ export function scoreProperty(
   const exitCapRate = Math.max(effectiveCapRate + agingAdj + bojAdj, 3);
 
   // ── DSCR ────────────────────────────────────────────────────────────────────
-  const { irr, leveredIrr, annualDebtService, annualCashflow, equityAmount, loanAmount, paybackYears, dscr, exitCapRate, exitValue } =
+  const { irr, leveredIrr, annualDebtService, annualCashflow, equityAmount, loanAmount, paybackYears, dscr, exitValue } =
     calculateIRR(askingPrice, adjustedNoi, exitCapRate, financing);
 
   const dscrVeto = dscr < 1.2; // Banks typically require ≥ 1.2
