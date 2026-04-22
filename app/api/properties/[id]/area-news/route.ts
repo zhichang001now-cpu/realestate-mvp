@@ -69,10 +69,17 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     const textBlock = response.content.findLast(b => b.type === 'text');
     const text = textBlock?.type === 'text' ? textBlock.text : '';
 
-    // Parse JSON from response
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) return NextResponse.json({ findings: [], overall: '情報を取得できませんでした' });
-    const result = JSON.parse(jsonMatch[0]);
+    // Parse JSON — handle markdown code fences and greedy matching
+    let result: { findings: unknown[]; overall: string } = { findings: [], overall: '情報を取得できませんでした' };
+    try {
+      // Try code fence first: ```json { ... } ```
+      const fenceMatch = text.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/);
+      const rawMatch = text.match(/\{[\s\S]*"findings"[\s\S]*\}/);
+      const raw = fenceMatch?.[1] ?? rawMatch?.[0];
+      if (raw) result = JSON.parse(raw);
+    } catch (parseErr) {
+      console.error('area-news JSON parse error, raw text:', text.slice(0, 500));
+    }
 
     return NextResponse.json({ location, ...result });
   } catch (e) {
