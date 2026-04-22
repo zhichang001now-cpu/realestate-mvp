@@ -6,6 +6,7 @@ export async function generateInvestmentMemo(
   property: Record<string, unknown>,
   scores: Record<string, unknown>,
   market: Record<string, unknown>,
+  areaSummary?: string,
 ): Promise<string> {
   const isBorrowedLand = property.land_right_type && property.land_right_type !== '所有権';
   const yearBuilt = property.year_built as number | null;
@@ -27,13 +28,14 @@ Market: JPN10Y=${market.jpn_10y}%, US10Y=${market.us_10y}%, USD/JPY=${market.usd
 IRR=${scores.irr}%, Levered IRR=${scores.levered_irr}%
 Scores: Acquisition=${scores.acquisition_score}, Leasing=${scores.leasing_score}, Financing=${scores.financing_score}
 Rec: ${scores.acquisition_rec} / Financing: ${scores.financing_rec}
-
+${areaSummary ? `\nArea development context: ${areaSummary}` : ''}
 Write a 3-4 sentence investment memo in Japanese. STRICT rules:
 1. 主語なし — do NOT use「〜を推奨する」「〜と判断する」
 2. Objective, factual tone
 3. Format: [Key strength]. [Main risk]. [NOI/cashflow insight]. [One key condition]
 4. Use specific numbers from the data above
-5. Output memo text ONLY, no title`;
+5. Output memo text ONLY, no title
+${areaSummary ? '6. Incorporate the area development context naturally into the memo' : ''}`;
 
   const response = await client.messages.create({
     model: 'claude-sonnet-4-20250514',

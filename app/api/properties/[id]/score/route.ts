@@ -54,6 +54,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     loan_years:   body.loan_years   ?? DEFAULT_FINANCING.loan_years,
     hold_years:   body.hold_years   ?? DEFAULT_FINANCING.hold_years,
   };
+  const areaSummary: string | undefined = body.area_news ?? undefined;
 
   const mergedProperty = { ...property, ...extraction };
   const scores = scoreProperty(mergedProperty, market, comp, financing);
@@ -61,7 +62,8 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   const memo = await generateInvestmentMemo(
     mergedProperty,
     scores as unknown as Record<string, unknown>,
-    market as unknown as Record<string, unknown>
+    market as unknown as Record<string, unknown>,
+    areaSummary,
   ).catch(() => '');
 
   const scoreId = generateId();

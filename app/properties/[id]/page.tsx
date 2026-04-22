@@ -154,7 +154,7 @@ export default function PropertyDetail() {
       const res = await fetch(`/api/properties/${id}/score`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ equity_ratio: equityRatio / 100, loan_rate: loanRate / 100, loan_years: loanYears, hold_years: holdYears }),
+        body: JSON.stringify({ equity_ratio: equityRatio / 100, loan_rate: loanRate / 100, loan_years: loanYears, hold_years: holdYears, ...(areaNews?.summary ? { area_news: areaNews.summary } : {}) }),
       });
       if (!res.ok) { const b = await res.json().catch(() => ({ error: `HTTP ${res.status}` })); throw new Error(b.error); }
       await load();
