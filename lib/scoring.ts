@@ -24,7 +24,6 @@ export interface PropertyData {
   prefecture?: string;
   city?: string;
   address_extracted?: string;
-  building_sqm?: number;
 }
 
 export interface FinancingParams {
