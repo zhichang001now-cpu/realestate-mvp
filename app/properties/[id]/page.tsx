@@ -583,6 +583,11 @@ export default function PropertyDetail() {
                 <div className={`p-3 rounded-lg text-sm font-medium text-center ${oshi.status === 'clean' ? 'bg-green-950 border border-green-800 text-green-300' : oshi.status === 'record_found' ? 'bg-red-950 border border-red-800 text-red-300' : 'bg-yellow-950 border border-yellow-800 text-yellow-300'}`}>
                   {oshi.status === 'clean' ? t('oshi.clean') : oshi.status === 'record_found' ? t('oshi.found') : t('oshi.manual')}
                 </div>
+                {oshi.status === 'manual_check' && (
+                  <p className="text-xs text-center" style={{ color: 'var(--muted)' }}>
+                    大島てるへの自動アクセスが不可のため、下のリンクで手動確認してください
+                  </p>
+                )}
                 <a href={oshi.searchUrl} target="_blank" rel="noopener noreferrer"
                   className="block text-center text-xs py-2 rounded-lg transition-colors hover:bg-blue-600"
                   style={{ background: 'var(--surface2)', color: 'var(--muted)' }}>
