@@ -111,8 +111,6 @@ export default function PropertyDetail() {
   const [areaNews, setAreaNews] = useState<AreaNews | null>(null);
   const [newsLoading, setNewsLoading] = useState(false);
   const [newsError, setNewsError] = useState<string | null>(null);
-  const [oshi, setOshi] = useState<OshiResult | null>(null);
-  const [oshiLoading, setOshiLoading] = useState(false);
 
   const [equityRatio, setEquityRatio] = useState(40);
   const [loanRate, setLoanRate] = useState(1.65);
@@ -188,16 +186,6 @@ export default function PropertyDetail() {
       setAreaNews(await res.json());
     } catch { setNewsError('Network error'); }
     finally { setNewsLoading(false); }
-  }
-
-  async function fetchOshimaland() {
-    if (!id) return;
-    setOshiLoading(true);
-    try {
-      const res = await fetch(`/api/properties/${id}/oshimaland`);
-      if (res.ok) setOshi(await res.json());
-    } catch { /* silent */ }
-    finally { setOshiLoading(false); }
   }
 
   async function handleRefreshMarket() {
@@ -570,33 +558,15 @@ export default function PropertyDetail() {
 
           {/* Oshimaland */}
           <section className="rounded-xl border p-5" style={{ background: 'var(--surface)', borderColor: 'var(--border)' }}>
-            <div className="flex justify-between items-center mb-3">
-              <h2 className="text-sm font-semibold uppercase tracking-wider" style={{ color: 'var(--muted)' }}>{t('oshi.title')}</h2>
-              <button onClick={fetchOshimaland} disabled={oshiLoading}
-                className="text-xs px-3 py-1.5 rounded-lg transition-colors hover:bg-blue-600 disabled:opacity-50"
-                style={{ background: 'var(--surface2)', color: 'var(--muted)' }}>
-                {oshiLoading ? t('oshi.checking') : t('oshi.check')}
-              </button>
-            </div>
-            {oshi ? (
-              <div className="space-y-2">
-                <div className={`p-3 rounded-lg text-sm font-medium text-center ${oshi.status === 'clean' ? 'bg-green-950 border border-green-800 text-green-300' : oshi.status === 'record_found' ? 'bg-red-950 border border-red-800 text-red-300' : 'bg-yellow-950 border border-yellow-800 text-yellow-300'}`}>
-                  {oshi.status === 'clean' ? t('oshi.clean') : oshi.status === 'record_found' ? t('oshi.found') : t('oshi.manual')}
-                </div>
-                {oshi.status === 'manual_check' && (
-                  <p className="text-xs text-center" style={{ color: 'var(--muted)' }}>
-                    大島てるへの自動アクセスが不可のため、下のリンクで手動確認してください
-                  </p>
-                )}
-                <a href={oshi.searchUrl} target="_blank" rel="noopener noreferrer"
-                  className="block text-center text-xs py-2 rounded-lg transition-colors hover:bg-blue-600"
-                  style={{ background: 'var(--surface2)', color: 'var(--muted)' }}>
-                  {t('oshi.open')} ↗
-                </a>
-              </div>
-            ) : (
-              !oshiLoading && <p className="text-sm text-center py-2" style={{ color: 'var(--muted)' }}>—</p>
-            )}
+            <h2 className="text-sm font-semibold uppercase tracking-wider mb-3" style={{ color: 'var(--muted)' }}>{t('oshi.title')}</h2>
+            <a
+              href={`https://www.oshimaland.co.jp/?address=${encodeURIComponent(extraction?.address_extracted ?? `${property.prefecture ?? ''}${property.address ?? ''}`)}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="block text-center text-sm py-2.5 rounded-lg transition-colors hover:bg-blue-600 font-medium"
+              style={{ background: 'var(--surface2)', color: 'var(--muted)' }}>
+              🔎 大島てるで確認 ↗
+            </a>
           </section>
         </div>
       </div>
