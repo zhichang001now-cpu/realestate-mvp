@@ -24,6 +24,7 @@ export interface PropertyData {
   prefecture?: string;
   city?: string;
   address_extracted?: string;
+  building_sqm?: number;
 }
 
 export interface FinancingParams {
@@ -63,6 +64,11 @@ export interface ScoreResult {
   valuation_status: string;
   irr_label: string;
   irr_description: string;
+  exit_cap_rate: number;
+  exit_value: number;
+  noi_gross: number;
+  noi_adjusted: number;
+  annual_capex: number;
   // Flags
   dscr_veto: boolean;
   land_reg_warning: boolean;
@@ -189,7 +195,7 @@ export function calculateIRR(
   const leveredIrr = equityAmount > 0 ? solveIRR(leveredCFs) : irr;
   const paybackYears = annualCashflow > 0 ? Math.round((equityAmount / annualCashflow) * 10) / 10 : 999;
 
-  return { irr, leveredIrr, annualDebtService, annualCashflow, equityAmount, loanAmount, paybackYears, dscr };
+  return { irr, leveredIrr, annualDebtService, annualCashflow, equityAmount, loanAmount, paybackYears, dscr, exitCapRate: effectiveExitCap, exitValue };
 }
 
 function irrLabel(irr: number): { label: string; description: string } {
@@ -233,14 +239,33 @@ export function scoreProperty(
     : 0;
 
   // ── CapEx-adjusted NOI ──────────────────────────────────────────────────────
-  // Age-based CapEx reserve: newer buildings cost less
-  const capexRateAdjusted = age < 10 ? tp.capexRate * 0.5
-                          : age < 25 ? tp.capexRate
-                          : tp.capexRate * 1.5;
-  const annualCapex = askingPrice * capexRateAdjusted;
+  // Opex (日常維持費: 管理費・税・保険・空室損) is assumed to be INCLUDED in
+  // noi_current. For gross NOI fallbacks (noi_full_occupancy or cap_rate calc),
+  // we apply a property-type expense ratio before adding CapEx reserve.
 
-  const rawNoi = property.noi_current ?? property.noi ?? (askingPrice * (capRate / 100));
-  const adjustedNoi = Math.max(0, rawNoi - annualCapex);
+  const OPEX_RATIO: Record<string, number> = {
+    'マンション': 0.20, 'オフィス': 0.28, 'ホテル': 0.40,
+    '物流施設': 0.15, '商業施設': 0.25, 'その他': 0.20,
+  };
+  const opexRatio = OPEX_RATIO[propType] ?? 0.20;
+
+  const rawNoi = property.noi_current
+    ?? property.noi_full_occupancy
+    ?? property.noi
+    ?? (askingPrice * (capRate / 100));
+
+  const isNetNoi = property.noi_current != null;
+  const noiAfterOpex = isNetNoi ? rawNoi : rawNoi * (1 - opexRatio);
+
+  // CapEx reserve only (大規模修繕積立) — based on 国交省ガイドライン per-sqm
+  // Rates: 0.2% → 0.35% → 0.55% → 0.75% by age tier (less aggressive than flat %)
+  const capexReserveRate = age < 10 ? 0.002
+                         : age < 25 ? 0.0035
+                         : age < 35 ? 0.0055
+                         :            0.0075;
+  const annualCapex = askingPrice * capexReserveRate;
+  const adjustedNoi = Math.max(0, noiAfterOpex - annualCapex);
+  const noi_gross = rawNoi;
 
   // ── Exit cap rate: base + aging correction ──────────────────────────────────
   const effectiveCapRate = capRate > 0 ? capRate : (rawNoi / askingPrice * 100);
@@ -250,7 +275,7 @@ export function scoreProperty(
   const exitCapRate = Math.max(effectiveCapRate + agingAdj + bojAdj, 3);
 
   // ── DSCR ────────────────────────────────────────────────────────────────────
-  const { irr, leveredIrr, annualDebtService, annualCashflow, equityAmount, loanAmount, paybackYears, dscr } =
+  const { irr, leveredIrr, annualDebtService, annualCashflow, equityAmount, loanAmount, paybackYears, dscr, exitCapRate, exitValue } =
     calculateIRR(askingPrice, adjustedNoi, exitCapRate, financing);
 
   const dscrVeto = dscr < 1.2; // Banks typically require ≥ 1.2
@@ -355,6 +380,11 @@ export function scoreProperty(
     valuation_status: capRate > avgCapRate + 0.5 ? 'Undervalued' : capRate < avgCapRate - 0.5 ? 'Overvalued' : 'Fair',
     irr_label,
     irr_description,
+    exit_cap_rate: exitCapRate,
+    exit_value: exitValue,
+    noi_gross,
+    noi_adjusted: adjustedNoi,
+    annual_capex: annualCapex,
     dscr_veto: dscrVeto,
     land_reg_warning: landRegWarning,
     industrial_opportunity: industrialOpportunity,

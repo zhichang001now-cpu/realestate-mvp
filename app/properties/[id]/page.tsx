@@ -23,6 +23,8 @@ interface Score {
   irr: number; levered_irr: number; annual_debt_service: number; annual_cashflow: number;
   equity_amount: number | null; loan_amount: number | null; payback_years: number; yield_on_cost: number;
   dscr: number; valuation_status: string; irr_label: string; irr_description: string;
+  exit_cap_rate: number | null; exit_value: number | null;
+  noi_gross: number | null; noi_adjusted: number | null; annual_capex: number | null;
   investment_memo: string | null;
   dscr_veto: boolean; land_reg_warning: boolean; industrial_opportunity: boolean; industrial_hub: string | null;
 }
@@ -284,7 +286,12 @@ export default function PropertyDetail() {
           {score?.dscr_veto && <span className="text-xs px-2 py-0.5 rounded bg-red-900 text-red-300 border border-red-700 shrink-0">{t('detail.flag.dscr')}</span>}
           {score?.land_reg_warning && <span className="text-xs px-2 py-0.5 rounded bg-orange-900 text-orange-300 border border-orange-700 shrink-0">{t('detail.flag.land_reg')}</span>}
           {score?.industrial_opportunity && <span className="text-xs px-2 py-0.5 rounded bg-blue-900 text-blue-300 border border-blue-700 shrink-0">{t('detail.flag.industrial')}</span>}
-          <div className="ml-auto shrink-0"><LangSwitcher /></div>
+          <button
+            onClick={() => window.open(`/properties/${id}/report`, '_blank')}
+            className="text-xs px-3 py-1.5 rounded-lg transition-colors hover:bg-gray-600 shrink-0"
+            style={{ background: 'var(--surface2)', color: 'var(--muted)', border: '1px solid var(--border)' }}
+          >📄 レポート</button>
+          <div className="shrink-0"><LangSwitcher /></div>
         </div>
       </header>
 
@@ -424,7 +431,23 @@ export default function PropertyDetail() {
                   <MetricRow label={t('score.payback')} value={score.payback_years >= 999 ? '—' : `${score.payback_years}年`} />
                 </div>
                 <div className="grid grid-cols-2 gap-2 mt-3">
-                  <div className={`col-span-2 p-2 rounded text-xs border ${score.dscr_veto ? 'bg-red-950 border-red-800 text-red-300' : 'border-gray-700'}`}
+                  {/* NOI Breakdown */}
+                {score.noi_gross != null && (
+                  <div className="col-span-2 rounded p-2 text-xs space-y-1" style={{ background: 'var(--surface2)', border: '1px solid var(--border)' }}>
+                    <div className="font-medium mb-1" style={{ color: 'var(--muted)' }}>NOI 内訳</div>
+                    <div className="flex justify-between"><span style={{ color: 'var(--muted)' }}>グロスNOI</span><span>{fmtVal(score.noi_gross, '万円')}</span></div>
+                    {score.annual_capex != null && <div className="flex justify-between"><span style={{ color: 'var(--muted)' }}>修繕積立控除</span><span className="text-red-400">−{fmtVal(score.annual_capex, '万円')}</span></div>}
+                    {score.noi_adjusted != null && <div className="flex justify-between font-medium border-t pt-1 mt-1" style={{ borderColor: 'var(--border)' }}><span>調整後NOI</span><span>{fmtVal(score.noi_adjusted, '万円')}</span></div>}
+                  </div>
+                )}
+                {/* Exit metrics */}
+                {score.exit_cap_rate != null && (
+                  <div className="col-span-2 rounded p-2 text-xs space-y-1" style={{ background: 'var(--surface2)', border: '1px solid var(--border)' }}>
+                    <div className="font-medium mb-1" style={{ color: 'var(--muted)' }}>出口シナリオ ({score.exit_cap_rate.toFixed(2)}%)</div>
+                    <div className="flex justify-between"><span style={{ color: 'var(--muted)' }}>推定出口価格</span><span>{score.exit_value ? fmtVal(score.exit_value, '億円') : '—'}</span></div>
+                  </div>
+                )}
+                <div className={`col-span-2 p-2 rounded text-xs border ${score.dscr_veto ? 'bg-red-950 border-red-800 text-red-300' : 'border-gray-700'}`}
                     style={score.dscr_veto ? {} : { background: 'var(--surface2)', color: 'var(--muted)' }}>
                     DSCR: <strong>{score.dscr.toFixed(2)}x</strong> {score.dscr_veto ? t('score.dscr_ng') : t('score.dscr_ok')}
                   </div>

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getDb, generateId, migrateSchema, migrateScoreColumns } from '@/lib/db';
+import { getDb, generateId, migrateSchema, migrateScoreColumns, migrateScoreExitColumns } from '@/lib/db';
 import { scoreProperty, DEFAULT_FINANCING, type FinancingParams } from '@/lib/scoring';
 import { fetchMlitComparables } from '@/lib/comparable';
 import { snapshotFromRows } from '@/lib/market';
@@ -8,6 +8,7 @@ import { generateInvestmentMemo } from '@/lib/memo';
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   await migrateSchema();
   await migrateScoreColumns();
+  await migrateScoreExitColumns();
 
   const sql = getDb();
 
@@ -71,6 +72,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       acquisition_rec, disposition_rec, development_rec, financing_rec,
       irr, levered_irr, annual_debt_service, annual_cashflow, equity_amount, loan_amount, payback_years,
       dscr, yield_on_cost, valuation_status,
+      exit_cap_rate, exit_value, noi_gross, noi_adjusted, annual_capex,
       dscr_veto, land_reg_warning, industrial_opportunity, industrial_hub,
       investment_memo, market_data_snapshot
     ) VALUES (
@@ -81,6 +83,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       ${scores.irr}, ${scores.levered_irr}, ${scores.annual_debt_service}, ${scores.annual_cashflow},
       ${scores.equity_amount}, ${scores.loan_amount}, ${scores.payback_years},
       ${scores.dscr}, ${scores.yield_on_cost}, ${scores.valuation_status},
+      ${scores.exit_cap_rate}, ${scores.exit_value}, ${scores.noi_gross}, ${scores.noi_adjusted}, ${scores.annual_capex},
       ${scores.dscr_veto}, ${scores.land_reg_warning}, ${scores.industrial_opportunity}, ${scores.industrial_hub ?? null},
       ${memo}, ${JSON.stringify(market)}
     )

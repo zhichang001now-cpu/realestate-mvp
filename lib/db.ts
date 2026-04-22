@@ -88,6 +88,15 @@ export async function migrateSchema() {
   }
 }
 
+export async function migrateScoreExitColumns() {
+  const sql = getDb();
+  const cols = ['exit_cap_rate REAL', 'exit_value REAL', 'noi_gross REAL', 'noi_adjusted REAL', 'annual_capex REAL'];
+  for (const col of cols) {
+    const name = col.split(' ')[0];
+    await sql`ALTER TABLE property_scores ADD COLUMN IF NOT EXISTS ${sql.unsafe(name)} REAL`.catch(() => {});
+  }
+}
+
 export async function migrateExtractionColumns() {
   const sql = getDb();
   await sql`ALTER TABLE property_extractions ADD COLUMN IF NOT EXISTS postal_code TEXT`.catch(() => {});
