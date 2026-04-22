@@ -28,34 +28,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   const location = prefecture || city ? `${prefecture}${city}` : '';
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-  const prompt = `あなたは日本不動産の投資アナリストです。
-以下の地域について、不動産投資に影響を与える最新の開発・計画情報をウェブ検索して日本語で調査してください。
-
-対象エリア: ${location}
-物件種別: ${property.property_type ?? 'マンション'}
-
-以下の観点で検索・調査してください:
-1. 新設・予定の商業施設（ショッピングモール、大型店舗など）
-2. 新設・予定の教育施設（学校、大学）
-3. 鉄道・交通インフラ（新駅、路線延伸、バス路線）
-4. 大型再開発・都市計画
-5. 企業誘致・工場建設
-
-結果をJSON形式で返してください（他のテキストは不要）:
-{
-  "findings": [
-    {
-      "category": "交通" | "商業" | "教育" | "再開発" | "産業",
-      "title": "短いタイトル",
-      "summary": "2〜3文の要約",
-      "impact": "positive" | "neutral" | "negative",
-      "timeframe": "開業予定や完成時期（不明の場合は null）",
-      "source": "情報源URL（あれば）"
-    }
-  ],
-  "overall": "エリア全体の開発動向の総括（2〜3文）"
-}
-情報が見つからない場合は findings を空配列にしてください。`;
+  const prompt = `${location}周辺の不動産投資に関係する最新の開発・再開発・インフラ情報をウェブ検索して、投資判断に役立つ内容を1〜2文の日本語で簡潔にまとめてください。余計な前置きや説明は不要です。結論だけ答えてください。`;
 
   try {
     const response = await client.messages.create({
@@ -65,23 +38,10 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
       messages: [{ role: 'user', content: prompt }],
     });
 
-    // Extract final text block
     const textBlock = response.content.findLast(b => b.type === 'text');
-    const text = textBlock?.type === 'text' ? textBlock.text : '';
+    const summary = textBlock?.type === 'text' ? textBlock.text.trim() : '情報を取得できませんでした';
 
-    // Parse JSON — handle markdown code fences and greedy matching
-    let result: { findings: unknown[]; overall: string } = { findings: [], overall: '情報を取得できませんでした' };
-    try {
-      // Try code fence first: ```json { ... } ```
-      const fenceMatch = text.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/);
-      const rawMatch = text.match(/\{[\s\S]*"findings"[\s\S]*\}/);
-      const raw = fenceMatch?.[1] ?? rawMatch?.[0];
-      if (raw) result = JSON.parse(raw);
-    } catch (parseErr) {
-      console.error('area-news JSON parse error, raw text:', text.slice(0, 500));
-    }
-
-    return NextResponse.json({ location, ...result });
+    return NextResponse.json({ location, summary });
   } catch (e) {
     console.error('area-news error:', e);
     return NextResponse.json({ error: 'Search failed' }, { status: 500 });

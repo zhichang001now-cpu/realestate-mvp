@@ -29,11 +29,7 @@ interface Score {
   dscr_veto: boolean; land_reg_warning: boolean; industrial_opportunity: boolean; industrial_hub: string | null;
 }
 interface MarketRow { data_type: string; value: number; unit: string; }
-interface AreaFinding {
-  category: string; title: string; summary: string;
-  impact: 'positive' | 'neutral' | 'negative'; timeframe: string | null; source?: string;
-}
-interface AreaNews { location: string; findings: AreaFinding[]; overall: string; }
+interface AreaNews { location: string; summary: string; }
 interface OshiResult {
   address: string; searchUrl: string; checked: boolean;
   hasRecord: boolean | null; status: 'clean' | 'record_found' | 'manual_check';
@@ -399,7 +395,7 @@ export default function PropertyDetail() {
 
           {/* Area News */}
           <section className="rounded-xl border p-5" style={{ background: 'var(--surface)', borderColor: 'var(--border)' }}>
-            <div className="flex justify-between items-center mb-4">
+            <div className="flex justify-between items-center mb-3">
               <h2 className="text-sm font-semibold uppercase tracking-wider" style={{ color: 'var(--muted)' }}>{t('news.title')}</h2>
               <button onClick={fetchAreaNews} disabled={newsLoading}
                 className="text-xs px-3 py-1.5 rounded-lg transition-colors hover:bg-blue-600 disabled:opacity-50"
@@ -407,35 +403,12 @@ export default function PropertyDetail() {
                 {newsLoading ? t('news.loading') : t('news.search')}
               </button>
             </div>
-            {newsError && <div className="text-sm text-red-400 rounded-lg p-3 bg-red-950 border border-red-800 mb-3">{newsError}</div>}
+            {newsError && <div className="text-sm text-red-400 rounded-lg p-3 bg-red-950 border border-red-800">{newsError}</div>}
             {areaNews ? (
-              <div className="space-y-3">
-                {areaNews.findings.length === 0 ? (
-                  <p className="text-sm text-center py-4" style={{ color: 'var(--muted)' }}>{t('news.empty')}</p>
-                ) : (
-                  areaNews.findings.map((f, i) => (
-                    <div key={i} className="p-3 rounded-lg" style={{ background: 'var(--surface2)', border: '1px solid var(--border)' }}>
-                      <div className="flex items-center justify-between gap-2 mb-1">
-                        <span className="text-xs px-2 py-0.5 rounded font-medium"
-                          style={{ background: f.impact === 'positive' ? '#14532d' : f.impact === 'negative' ? '#450a0a' : '#1c1917', color: f.impact === 'positive' ? '#86efac' : f.impact === 'negative' ? '#fca5a5' : '#a8a29e' }}>
-                          {f.category}
-                        </span>
-                        {f.timeframe && <span className="text-xs" style={{ color: 'var(--muted)' }}>{f.timeframe}</span>}
-                      </div>
-                      <div className="text-sm font-medium mb-1">{f.title}</div>
-                      <div className="text-xs leading-relaxed" style={{ color: 'var(--muted)' }}>{f.summary}</div>
-                    </div>
-                  ))
-                )}
-                {areaNews.overall && (
-                  <div className="p-3 rounded-lg text-sm" style={{ background: 'var(--surface2)', color: 'var(--muted)' }}>
-                    <span className="font-medium text-white">{t('news.overall')}: </span>{areaNews.overall}
-                  </div>
-                )}
-              </div>
+              <p className="text-sm leading-relaxed">{areaNews.summary}</p>
             ) : (
               !newsLoading && !newsError && (
-                <p className="text-sm text-center py-4" style={{ color: 'var(--muted)' }}>—</p>
+                <p className="text-sm" style={{ color: 'var(--muted)' }}>—</p>
               )
             )}
           </section>
