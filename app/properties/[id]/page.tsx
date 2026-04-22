@@ -408,6 +408,49 @@ export default function PropertyDetail() {
               <p className="text-sm leading-relaxed">{score.investment_memo}</p>
             </section>
           )}
+
+          {/* Area News */}
+          <section className="rounded-xl border p-5" style={{ background: 'var(--surface)', borderColor: 'var(--border)' }}>
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-sm font-semibold uppercase tracking-wider" style={{ color: 'var(--muted)' }}>{t('news.title')}</h2>
+              <button onClick={fetchAreaNews} disabled={newsLoading}
+                className="text-xs px-3 py-1.5 rounded-lg transition-colors hover:bg-blue-600 disabled:opacity-50"
+                style={{ background: 'var(--surface2)', color: 'var(--muted)' }}>
+                {newsLoading ? t('news.loading') : t('news.search')}
+              </button>
+            </div>
+            {newsError && <div className="text-sm text-red-400 rounded-lg p-3 bg-red-950 border border-red-800 mb-3">{newsError}</div>}
+            {areaNews ? (
+              <div className="space-y-3">
+                {areaNews.findings.length === 0 ? (
+                  <p className="text-sm text-center py-4" style={{ color: 'var(--muted)' }}>{t('news.empty')}</p>
+                ) : (
+                  areaNews.findings.map((f, i) => (
+                    <div key={i} className="p-3 rounded-lg" style={{ background: 'var(--surface2)', border: '1px solid var(--border)' }}>
+                      <div className="flex items-center justify-between gap-2 mb-1">
+                        <span className="text-xs px-2 py-0.5 rounded font-medium"
+                          style={{ background: f.impact === 'positive' ? '#14532d' : f.impact === 'negative' ? '#450a0a' : '#1c1917', color: f.impact === 'positive' ? '#86efac' : f.impact === 'negative' ? '#fca5a5' : '#a8a29e' }}>
+                          {f.category}
+                        </span>
+                        {f.timeframe && <span className="text-xs" style={{ color: 'var(--muted)' }}>{f.timeframe}</span>}
+                      </div>
+                      <div className="text-sm font-medium mb-1">{f.title}</div>
+                      <div className="text-xs leading-relaxed" style={{ color: 'var(--muted)' }}>{f.summary}</div>
+                    </div>
+                  ))
+                )}
+                {areaNews.overall && (
+                  <div className="p-3 rounded-lg text-sm" style={{ background: 'var(--surface2)', color: 'var(--muted)' }}>
+                    <span className="font-medium text-white">{t('news.overall')}: </span>{areaNews.overall}
+                  </div>
+                )}
+              </div>
+            ) : (
+              !newsLoading && !newsError && (
+                <p className="text-sm text-center py-4" style={{ color: 'var(--muted)' }}>—</p>
+              )
+            )}
+          </section>
         </div>
 
         {/* RIGHT */}
@@ -522,6 +565,32 @@ export default function PropertyDetail() {
                   <MetricRow key={m.key} label={m.label} value={marketMap[m.key] !== undefined ? fmtVal(marketMap[m.key], m.unit) : '—'} />
                 ))}
               </div>
+            )}
+          </section>
+
+          {/* Oshimaland */}
+          <section className="rounded-xl border p-5" style={{ background: 'var(--surface)', borderColor: 'var(--border)' }}>
+            <div className="flex justify-between items-center mb-3">
+              <h2 className="text-sm font-semibold uppercase tracking-wider" style={{ color: 'var(--muted)' }}>{t('oshi.title')}</h2>
+              <button onClick={fetchOshimaland} disabled={oshiLoading}
+                className="text-xs px-3 py-1.5 rounded-lg transition-colors hover:bg-blue-600 disabled:opacity-50"
+                style={{ background: 'var(--surface2)', color: 'var(--muted)' }}>
+                {oshiLoading ? t('oshi.checking') : t('oshi.check')}
+              </button>
+            </div>
+            {oshi ? (
+              <div className="space-y-2">
+                <div className={`p-3 rounded-lg text-sm font-medium text-center ${oshi.status === 'clean' ? 'bg-green-950 border border-green-800 text-green-300' : oshi.status === 'record_found' ? 'bg-red-950 border border-red-800 text-red-300' : 'bg-yellow-950 border border-yellow-800 text-yellow-300'}`}>
+                  {oshi.status === 'clean' ? t('oshi.clean') : oshi.status === 'record_found' ? t('oshi.found') : t('oshi.manual')}
+                </div>
+                <a href={oshi.searchUrl} target="_blank" rel="noopener noreferrer"
+                  className="block text-center text-xs py-2 rounded-lg transition-colors hover:bg-blue-600"
+                  style={{ background: 'var(--surface2)', color: 'var(--muted)' }}>
+                  {t('oshi.open')} ↗
+                </a>
+              </div>
+            ) : (
+              !oshiLoading && <p className="text-sm text-center py-2" style={{ color: 'var(--muted)' }}>—</p>
             )}
           </section>
         </div>
