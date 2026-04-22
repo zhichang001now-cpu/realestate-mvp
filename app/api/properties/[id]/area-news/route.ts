@@ -8,11 +8,24 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   const [property] = await sql`SELECT prefecture, city, property_type FROM properties WHERE id = ${params.id}`;
   if (!property) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
-  const prefecture = (property.prefecture as string) ?? '';
-  const city = (property.city as string) ?? '';
-  if (!city) return NextResponse.json({ error: 'City not set — upload a document first' }, { status: 422 });
+  let prefecture = (property.prefecture as string) ?? '';
+  let city = (property.city as string) ?? '';
 
-  const location = `${prefecture}${city}`;
+  // If city is missing, try to derive from address_extracted in property_extractions
+  if (!city) {
+    const [ext] = await sql`SELECT address_extracted FROM property_extractions WHERE property_id = ${params.id} ORDER BY created_at DESC LIMIT 1`;
+    const addr = (ext?.address_extracted as string) ?? '';
+    if (addr) {
+      const prefMatch = addr.match(/(.{2,3}[都道府県])/);
+      const cityMatch = addr.match(/[都道府県](.+?[市区町村])/);
+      if (prefMatch) prefecture = prefMatch[1];
+      if (cityMatch) city = cityMatch[1];
+    }
+  }
+
+  if (!city && !prefecture) return NextResponse.json({ error: 'エリア情報がありません。まずPDFをアップロードしてAI抽取してください。' }, { status: 422 });
+
+  const location = prefecture || city ? `${prefecture}${city}` : '';
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
   const prompt = `あなたは日本不動産の投資アナリストです。
