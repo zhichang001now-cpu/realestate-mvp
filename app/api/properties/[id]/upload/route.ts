@@ -2,15 +2,41 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDb, generateId, initSchema, migrateExtractionColumns } from '@/lib/db';
 import { EXTRACTION_PROMPT } from '@/lib/extraction';
 
-function parseExtractionJson(text: string): Record<string, unknown> {
-  // Strip markdown code fences if present
+export const maxDuration = 120;
+
+const VERIFY_ITEMS_PROMPT = `You are verifying a Japanese real estate document extraction.
+Focus ONLY on the 備考 (remarks), 特記事項, 収支明細, and any income/expense section.
+
+Extract ALL income and expense line items. Return ONLY this JSON, no markdown:
+{
+  "income_items": [{"label": "exact Japanese label", "amount": integer_JPY_per_year}],
+  "expense_items": [{"label": "exact Japanese label", "amount": integer_JPY_per_year}]
+}
+
+Rules:
+- 月額 (monthly) → multiply by 12 to get annual amount
+- 年額 (annual)  → use as-is
+- For unit-based rents like "A区画(44.5㎡)/月額238,700円" → label="A区画リース料", amount=238700×12=2864400
+- Include ALL: 各区画リース料, 管理費, 修繕積立金, 固定資産税, 共用部清掃費, and any other line item
+- Do NOT skip any row. Do NOT merge items.`;
+
+type ItemArray = Array<{ label: string; amount: number }>;
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function callExtract(client: any, contentBlock: any, prompt: string, maxTokens: number): Promise<Record<string, unknown>> {
+  const response = await client.messages.create({
+    model: 'claude-sonnet-4-20250514',
+    max_tokens: maxTokens,
+    messages: [{ role: 'user', content: [contentBlock, { type: 'text', text: prompt }] }],
+  });
+  const text = response.content[0].type === 'text' ? response.content[0].text : '';
   const cleaned = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '').trim();
-  // Find first { and last } to handle any surrounding text
   const start = cleaned.indexOf('{');
   const end = cleaned.lastIndexOf('}');
-  if (start === -1 || end === -1) throw new Error('No JSON object found in response');
+  if (start === -1 || end === -1) throw new Error('No JSON in response');
   return JSON.parse(cleaned.slice(start, end + 1));
 }
+
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   await initSchema();
@@ -44,18 +70,36 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       ? { type: 'document' as const, source: { type: 'base64' as const, media_type: 'application/pdf' as const, data: base64Data } }
       : { type: 'image' as const, source: { type: 'base64' as const, media_type: file.type as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp', data: base64Data } };
 
-  const response = await client.messages.create({
-    model: 'claude-sonnet-4-20250514',
-    max_tokens: 4000,
-    messages: [{ role: 'user', content: [contentBlock, { type: 'text', text: EXTRACTION_PROMPT }] }],
-  });
-
-  const text = response.content[0].type === 'text' ? response.content[0].text : '';
-  const extraction = parseExtractionJson(text);
+  // Pass 1: full extraction
+  const extraction = await callExtract(client, contentBlock, EXTRACTION_PROMPT, 8000);
 
   if (!extraction.noi) {
     extraction.noi = extraction.noi_current ?? extraction.noi_full_occupancy ?? null;
   }
+
+  // Pass 2: if income_items empty, run a focused 備考-section re-extraction
+  let incomeItems = (extraction.income_items ?? []) as ItemArray;
+  let expenseItems = (extraction.expense_items ?? []) as ItemArray;
+
+  if (incomeItems.length === 0) {
+    try {
+      const verify1 = await callExtract(client, contentBlock, VERIFY_ITEMS_PROMPT, 4000);
+      incomeItems = (verify1.income_items ?? []) as ItemArray;
+      expenseItems = (verify1.expense_items ?? []) as ItemArray;
+
+      // Pass 3: still empty → one final retry
+      if (incomeItems.length === 0) {
+        const verify2 = await callExtract(client, contentBlock, VERIFY_ITEMS_PROMPT, 4000);
+        incomeItems = (verify2.income_items ?? []) as ItemArray;
+        expenseItems = (verify2.expense_items ?? []) as ItemArray;
+      }
+    } catch {
+      // verification failed — keep whatever pass 1 returned
+    }
+  }
+
+  extraction.income_items = incomeItems;
+  extraction.expense_items = expenseItems;
 
   const eid = generateId();
   await sql`
