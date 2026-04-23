@@ -33,6 +33,8 @@ export interface ExtractionResult {
   management_fee?: number;
   other_expenses?: number;
   total_expenses?: number;
+  income_items?: Array<{ label: string; amount: number }>;
+  expense_items?: Array<{ label: string; amount: number }>;
   tenant_summary?: Array<{ name: string; floor: string; sqm: number; rent: number; expiry: string }>;
   lease_expiry_risk?: 'low' | 'medium' | 'high';
   special_notes?: string;
@@ -107,6 +109,8 @@ Return ONLY this JSON, no markdown, no explanation:
   "land_right_type": "所有権|旧法借地権|新法借地権|底地" or null,
   "land_lease_monthly": integer JPY/month or null,
   "land_lease_expiry": "year or date string" or null,
+  "income_items": [{"label": "項目名 (e.g.賃料収入)", "amount": integer_JPY_per_year}, ...],
+  "expense_items": [{"label": "項目名 (e.g.管理費)", "amount": integer_JPY_per_year}, ...],
   "fixed_asset_tax": integer JPY/year or null,
   "management_fee": integer JPY/year or null,
   "other_expenses": integer JPY/year or null,
@@ -116,7 +120,16 @@ Return ONLY this JSON, no markdown, no explanation:
   "special_notes": "特記事項 full text or null",
   "raw_all_fields": {"日本語フィールド名": "抽出値の文字列"},
   "extraction_confidence": number
-}`;
+}
+
+income_items / expense_items rules:
+- Extract EVERY income and expense line item listed in the document as-is.
+- Use the EXACT label from the document (Japanese OK).
+- Convert amounts using Step 1 unit rules → raw JPY integers.
+- income_items: 賃料収入, 駐車場収入, 礼金, 更新料, etc.
+- expense_items: 管理費, 固定資産税, 修繕費, 損害保険料, PM費用, etc.
+- Do NOT merge or rename items. If the doc has 5 expense rows, output 5 items.
+- Also fill fixed_asset_tax / management_fee / other_expenses from these items for backward compatibility.`;
 
 export async function extractFromFile(filePath: string, mimeType: string): Promise<ExtractionResult> {
   const fileData = fs.readFileSync(filePath);

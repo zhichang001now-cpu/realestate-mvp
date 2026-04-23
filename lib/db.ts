@@ -100,6 +100,8 @@ export async function migrateScoreExitColumns() {
 export async function migrateExtractionColumns() {
   const sql = getDb();
   await sql`ALTER TABLE property_extractions ADD COLUMN IF NOT EXISTS postal_code TEXT`.catch(() => {});
+  await sql`ALTER TABLE property_extractions ADD COLUMN IF NOT EXISTS income_items TEXT`.catch(() => {});
+  await sql`ALTER TABLE property_extractions ADD COLUMN IF NOT EXISTS expense_items TEXT`.catch(() => {});
 }
 
 export async function migrateScoreColumns() {

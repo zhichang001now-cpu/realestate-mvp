@@ -15,6 +15,8 @@ interface Extraction {
   fixed_asset_tax: number | null; management_fee: number | null; other_expenses: number | null; total_expenses: number | null;
   gross_rent: number | null; lease_expiry_risk: string | null; special_notes: string | null;
   extraction_confidence: number | null; manually_verified: number | null;
+  income_items: Array<{ label: string; amount: number }> | null;
+  expense_items: Array<{ label: string; amount: number }> | null;
 }
 interface Score {
   overall_score: number; acquisition_score: number; disposition_score: number;
@@ -123,6 +125,11 @@ export default function PropertyDetail() {
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       setProperty(data.property);
+      if (data.extraction) {
+        const ex = data.extraction;
+        if (typeof ex.income_items === 'string') ex.income_items = JSON.parse(ex.income_items || '[]');
+        if (typeof ex.expense_items === 'string') ex.expense_items = JSON.parse(ex.expense_items || '[]');
+      }
       setExtraction(data.extraction);
       setScore(data.score);
       fetchComp();
@@ -351,18 +358,66 @@ export default function PropertyDetail() {
           {extraction && (
             <section className="rounded-xl border p-5" style={{ background: 'var(--surface)', borderColor: 'var(--border)' }}>
               <h2 className="text-sm font-semibold uppercase tracking-wider mb-4" style={{ color: 'var(--muted)' }}>{t('detail.section.expenses')}</h2>
-              <div className="grid grid-cols-2 gap-x-8">
-                <div>
-                  <EditableMetric label={t('metric.gross_rent')} field="gross_rent" displayValue={fmtVal(extraction.gross_rent, '万円')} />
-                  <EditableMetric label={t('metric.mgmt_fee')} field="management_fee" displayValue={fmtVal(extraction.management_fee, '万円')} />
-                  <EditableMetric label={t('metric.fixed_tax')} field="fixed_asset_tax" displayValue={fmtVal(extraction.fixed_asset_tax, '万円')} />
+
+              {/* Dynamic line items from PDF */}
+              {((extraction.income_items?.length ?? 0) > 0 || (extraction.expense_items?.length ?? 0) > 0) ? (
+                <div className="grid grid-cols-2 gap-x-6">
+                  {/* Income */}
+                  <div>
+                    <div className="text-xs font-semibold mb-2 pb-1 border-b" style={{ color: 'var(--muted)', borderColor: 'var(--border)' }}>{t('metric.income')}</div>
+                    {(extraction.income_items ?? []).map((item, i) => (
+                      <div key={i} className="flex justify-between items-baseline py-1.5 border-b text-sm" style={{ borderColor: 'var(--border)' }}>
+                        <span style={{ color: 'var(--muted)' }}>{item.label}</span>
+                        <span className="font-medium tabular-nums">{fmtVal(item.amount, '万円')}</span>
+                      </div>
+                    ))}
+                    {(extraction.income_items?.length ?? 0) > 1 && (
+                      <div className="flex justify-between items-baseline py-1.5 text-sm font-semibold">
+                        <span style={{ color: 'var(--muted)' }}>{t('metric.income_total')}</span>
+                        <span className="tabular-nums">{fmtVal((extraction.income_items ?? []).reduce((s, x) => s + x.amount, 0), '万円')}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Expense */}
+                  <div>
+                    <div className="text-xs font-semibold mb-2 pb-1 border-b" style={{ color: 'var(--muted)', borderColor: 'var(--border)' }}>{t('metric.expense')}</div>
+                    {(extraction.expense_items ?? []).map((item, i) => (
+                      <div key={i} className="flex justify-between items-baseline py-1.5 border-b text-sm" style={{ borderColor: 'var(--border)' }}>
+                        <span style={{ color: 'var(--muted)' }}>{item.label}</span>
+                        <span className="font-medium tabular-nums">{fmtVal(item.amount, '万円')}</span>
+                      </div>
+                    ))}
+                    {(extraction.expense_items?.length ?? 0) > 1 && (
+                      <div className="flex justify-between items-baseline py-1.5 text-sm font-semibold">
+                        <span style={{ color: 'var(--muted)' }}>{t('metric.expense_total')}</span>
+                        <span className="tabular-nums">{fmtVal((extraction.expense_items ?? []).reduce((s, x) => s + x.amount, 0), '万円')}</span>
+                      </div>
+                    )}
+                  </div>
                 </div>
-                <div>
-                  <EditableMetric label={t('metric.other_exp')} field="other_expenses" displayValue={fmtVal(extraction.other_expenses, '万円')} />
-                  <EditableMetric label={t('metric.total_exp')} field="total_expenses" displayValue={fmtVal(extraction.total_expenses, '万円')} />
-                  <EditableMetric label={t('metric.price_tsubo')} field="price_per_tsubo" displayValue={fmtVal(extraction.price_per_tsubo, '万円/坪')} />
+              ) : (
+                /* Fallback: fixed columns for older extractions */
+                <div className="grid grid-cols-2 gap-x-8">
+                  <div>
+                    <EditableMetric label={t('metric.gross_rent')} field="gross_rent" displayValue={fmtVal(extraction.gross_rent, '万円')} />
+                    <EditableMetric label={t('metric.mgmt_fee')} field="management_fee" displayValue={fmtVal(extraction.management_fee, '万円')} />
+                    <EditableMetric label={t('metric.fixed_tax')} field="fixed_asset_tax" displayValue={fmtVal(extraction.fixed_asset_tax, '万円')} />
+                  </div>
+                  <div>
+                    <EditableMetric label={t('metric.other_exp')} field="other_expenses" displayValue={fmtVal(extraction.other_expenses, '万円')} />
+                    <EditableMetric label={t('metric.total_exp')} field="total_expenses" displayValue={fmtVal(extraction.total_expenses, '万円')} />
+                    <EditableMetric label={t('metric.price_tsubo')} field="price_per_tsubo" displayValue={fmtVal(extraction.price_per_tsubo, '万円/坪')} />
+                  </div>
                 </div>
+              )}
+
+              {/* 坪単価 always shown */}
+              <div className="mt-3 pt-3 border-t flex justify-between text-sm" style={{ borderColor: 'var(--border)' }}>
+                <span style={{ color: 'var(--muted)' }}>{t('metric.price_tsubo')}</span>
+                <span className="font-medium">{fmtVal(extraction.price_per_tsubo, '万円/坪')}</span>
               </div>
+
               {extraction.special_notes && (
                 <div className="mt-4 p-3 rounded-lg text-sm" style={{ background: 'var(--surface2)', color: 'var(--muted)' }}>
                   <span className="font-medium text-white">{t('detail.notes')}: </span>{extraction.special_notes}

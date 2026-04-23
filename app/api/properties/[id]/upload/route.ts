@@ -81,7 +81,8 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       land_right_type, land_lease_monthly, land_lease_expiry,
       fixed_asset_tax, management_fee, other_expenses, total_expenses,
       tenant_summary, lease_expiry_risk, special_notes,
-      raw_all_fields, extraction_confidence, postal_code, raw_extraction
+      raw_all_fields, extraction_confidence, postal_code, raw_extraction,
+      income_items, expense_items
     ) VALUES (
       ${eid}, ${params.id}, ${docId},
       ${extraction.address_extracted ?? null}, ${extraction.station ?? null}, ${extraction.walk_minutes ?? null},
@@ -94,7 +95,8 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       ${extraction.land_right_type ?? null}, ${extraction.land_lease_monthly ?? null}, ${extraction.land_lease_expiry ?? null},
       ${extraction.fixed_asset_tax ?? null}, ${extraction.management_fee ?? null}, ${extraction.other_expenses ?? null}, ${extraction.total_expenses ?? null},
       ${JSON.stringify(extraction.tenant_summary ?? [])}, ${extraction.lease_expiry_risk ?? 'low'}, ${extraction.special_notes ?? null},
-      ${JSON.stringify(extraction.raw_all_fields ?? {})}, ${extraction.extraction_confidence ?? 0.5}, ${(extraction.postal_code as string) ?? null}, ${JSON.stringify(extraction)}
+      ${JSON.stringify(extraction.raw_all_fields ?? {})}, ${extraction.extraction_confidence ?? 0.5}, ${(extraction.postal_code as string) ?? null}, ${JSON.stringify(extraction)},
+      ${JSON.stringify(extraction.income_items ?? [])}, ${JSON.stringify(extraction.expense_items ?? [])}
     )
   `;
 
