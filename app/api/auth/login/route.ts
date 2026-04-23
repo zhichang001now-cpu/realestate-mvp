@@ -12,8 +12,8 @@ export async function POST(req: NextRequest) {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'lax',
-    maxAge: 60 * 60 * 24 * 30, // 30 days
     path: '/',
+    // no maxAge = session cookie, expires when browser closes
   });
   return res;
 }

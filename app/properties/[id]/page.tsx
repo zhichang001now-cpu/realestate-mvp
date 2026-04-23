@@ -494,13 +494,22 @@ export default function PropertyDetail() {
                 { label: t('fin.loan_years'),   value: loanYears,   set: setLoanYears,   suffix: '年', min: 5, max: 35, step: 1 },
                 { label: t('fin.hold_years'),   value: holdYears,   set: setHoldYears,   suffix: '年', min: 1, max: 20, step: 1 },
               ].map(f => (
-                <div key={f.label}>
-                  <div className="flex justify-between mb-1">
-                    <span className="text-xs" style={{ color: 'var(--muted)' }}>{f.label}</span>
-                    <span className="text-xs font-medium">{f.value}{f.suffix}</span>
+                <div key={f.label} className="flex items-center justify-between gap-3">
+                  <span className="text-xs flex-1" style={{ color: 'var(--muted)' }}>{f.label}</span>
+                  <div className="flex items-center gap-1">
+                    <input
+                      type="number"
+                      min={f.min} max={f.max} step={f.step}
+                      value={f.value}
+                      onChange={e => {
+                        const v = Number(e.target.value);
+                        if (!isNaN(v) && v >= f.min && v <= f.max) f.set(v);
+                      }}
+                      className="w-20 text-right text-sm font-medium rounded-md px-2 py-1 outline-none border focus:border-blue-500"
+                      style={{ background: 'var(--surface2)', borderColor: 'var(--border)', color: 'var(--fg)' }}
+                    />
+                    <span className="text-xs w-4" style={{ color: 'var(--muted)' }}>{f.suffix}</span>
                   </div>
-                  <input type="range" min={f.min} max={f.max} step={f.step} value={f.value}
-                    onChange={e => f.set(Number(e.target.value))} className="w-full accent-blue-500" />
                 </div>
               ))}
             </div>
