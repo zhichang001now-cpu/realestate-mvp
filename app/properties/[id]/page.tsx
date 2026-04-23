@@ -558,9 +558,14 @@ export default function PropertyDetail() {
                       value={f.value}
                       onChange={e => {
                         const v = Number(e.target.value);
-                        if (!isNaN(v) && v >= f.min && v <= f.max) f.set(v);
+                        if (!isNaN(v)) f.set(v);
                       }}
-                      className="w-20 text-right text-sm font-medium rounded-md px-2 py-1 outline-none border focus:border-blue-500"
+                      onBlur={e => {
+                        const v = Number(e.target.value);
+                        if (isNaN(v) || v < f.min) f.set(f.min);
+                        else if (v > f.max) f.set(f.max);
+                      }}
+                      className="w-20 text-right text-sm font-medium rounded-md px-2 py-1 outline-none border focus:border-blue-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                       style={{ background: 'var(--surface2)', borderColor: 'var(--border)', color: 'var(--fg)' }}
                     />
                     <span className="text-xs w-4" style={{ color: 'var(--muted)' }}>{f.suffix}</span>
