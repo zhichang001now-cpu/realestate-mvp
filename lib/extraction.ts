@@ -41,12 +41,35 @@ export interface ExtractionResult {
 }
 
 const EXTRACTION_PROMPT = `You are a Japanese real estate data extraction specialist.
-Extract ALL data from this property document into the exact JSON structure below.
 
-CRITICAL EXTRACTION RULES:
-1. Era year conversion (MUST DO): 令和X年=2018+X, 平成X年=1988+X, 昭和X年=1925+X. Example: 平成2年1月築 → year_built: 1990
-2. Money conversion: 億円×100000000, 万円×10000. Example: 1.25億円 → 125000000
-3. Area conversion: 1坪=3.3058㎡. Always output in ㎡.
+== STEP 1: NORMALIZE ALL MONETARY VALUES TO RAW JPY INTEGERS ==
+Before filling any JSON, scan the entire document and convert every monetary expression you find to a raw integer (yen). Use these rules — apply EXACTLY ONE multiplier per value:
+
+  億円  → × 100,000,000   e.g. 1.6億円        = 160,000,000
+  百万円 → × 1,000,000     e.g. 160百万円       = 160,000,000
+  万円  → × 10,000        e.g. 16,000万円      = 160,000,000
+  円    → × 1             e.g. 160,000,000円   = 160,000,000
+  Mixed → add parts       e.g. 1億6,000万円    = 100,000,000 + 60,000,000 = 160,000,000
+
+  IMPORTANT: Table column headers like "（百万円）" or "単位：万円" define the unit for ALL values in that column.
+  NEVER apply two multipliers to the same number.
+  If cap_rate is stated, sanity-check: asking_price ≈ annual_NOI ÷ (cap_rate / 100). If the ratio is off by ×100 or ×10000, you applied the wrong unit — fix it.
+
+== STEP 2: EXTRACT INTO JSON ==
+Using the normalized values from Step 1, extract all data into the exact JSON structure below.
+
+OTHER EXTRACTION RULES:
+1. Era year: 令和X年=2018+X, 平成X年=1988+X, 昭和X年=1925+X. e.g. 平成2年1月築 → year_built: 1990
+2. Area: 1坪=3.3058㎡. Always output in ㎡.
+3. Station: "千葉駅徒歩6分" → station:"千葉", walk_minutes:6
+4. NOI: extract BOTH 満室想定(noi_full_occupancy) AND 現況(noi_current) separately.
+5. surface_yield = 表面利回り or 想定利回り (%). cap_rate = NOIベース利回り (%).
+6. occupancy_rate: "36.36%" → 36.36. Calculate if needed: current_rent/full_rent×100.
+7. unit_count: 総戸数, 戸数, 総室数 etc.
+8. land_right_type: 所有権/借地権/旧法借地権/底地. Default "所有権" if not mentioned.
+9. land_lease_monthly: 地代 monthly in JPY. "月額35万円" → 350000.
+10. Put EVERY extracted text field in raw_all_fields.
+11. extraction_confidence: 0.95 if most numeric fields found, 0.7 if partial, 0.4 if sparse.
 4. Station parsing: "千葉駅徒歩6分" → station: "千葉", walk_minutes: 6. "○○駅 徒歩△分" pattern.
 5. NOI: extract BOTH 満室想定 (noi_full_occupancy) AND 現況 (noi_current) separately.
 6. surface_yield = 表面利回り or 想定利回り (%). cap_rate = NOIベース利回り (%).
@@ -118,6 +141,27 @@ export async function extractFromFile(filePath: string, mimeType: string): Promi
     const result = JSON.parse(cleaned);
     if (!result.noi && result.noi_current) result.noi = result.noi_current;
     else if (!result.noi && result.noi_full_occupancy) result.noi = result.noi_full_occupancy;
+
+    // Unit sanity check: back-calculate implied asking_price from cap_rate × NOI.
+    // Auto-correct if the extracted value is off by a known unit multiplier.
+    const noi = result.noi ?? result.noi_full_occupancy ?? result.noi_current;
+    if (result.asking_price && result.cap_rate && noi) {
+      const implied = noi / (result.cap_rate / 100);
+      const ratio = result.asking_price / implied;
+      if (ratio < 0.8 || ratio > 1.2) {
+        // Try dividing/multiplying by common unit factors: 100, 10000, 1/100, 1/10000
+        for (const factor of [100, 10000, 0.01, 0.0001]) {
+          const corrected = result.asking_price / factor;
+          const newRatio = corrected / implied;
+          if (newRatio > 0.8 && newRatio < 1.2) {
+            result.asking_price = Math.round(corrected);
+            result._unit_correction = `asking_price ÷ ${factor} (cap_rate sanity check)`;
+            break;
+          }
+        }
+      }
+    }
+
     return result;
   } catch {
     return { extraction_confidence: 0.1 };
