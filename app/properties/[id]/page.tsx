@@ -52,26 +52,40 @@ function fmtVal(n: number | null | undefined, unit = '', digits = 2): string {
   return n.toLocaleString() + (unit ? ' ' + unit : '');
 }
 
-function scoreColor(v: number): string {
-  if (v >= 0.3) return '#34d399';
-  if (v >= 0) return '#fbbf24';
+// Convert -1~+1 raw score to optimistic 0-100 display score
+// -1→40, 0→68, +1→95 (slightly optimistic mapping)
+function toDisplay100(v: number): number {
+  return Math.min(99, Math.max(0, Math.round(40 + ((v + 1) / 2) * 55)));
+}
+
+function scoreColor100(s: number): string {
+  if (s >= 78) return '#34d399';
+  if (s >= 62) return '#fbbf24';
   return '#f87171';
 }
 
+function verdict(s: number, dscrVeto: boolean): { text: string; color: string } {
+  if (dscrVeto) return { text: '見送り ✕', color: '#f87171' };
+  if (s >= 80) return { text: '積極買入！', color: '#34d399' };
+  if (s >= 68) return { text: '買入検討', color: '#60a5fa' };
+  if (s >= 55) return { text: '慎重に検討', color: '#fbbf24' };
+  return { text: '見送り', color: '#f87171' };
+}
+
 function ScoreBar({ label, value, rec }: { label: string; value: number; rec?: string }) {
-  const pct = Math.round(((value + 1) / 2) * 100);
-  const color = scoreColor(value);
+  const s = toDisplay100(value);
+  const color = scoreColor100(s);
   return (
     <div>
       <div className="flex justify-between items-center mb-1">
         <span className="text-xs" style={{ color: 'var(--muted)' }}>{label}</span>
         <div className="flex items-center gap-2">
           {rec && <span className="text-xs" style={{ color: 'var(--muted)' }}>{rec}</span>}
-          <span className="text-sm font-semibold" style={{ color }}>{value > 0 ? '+' : ''}{value.toFixed(1)}</span>
+          <span className="text-sm font-semibold" style={{ color }}>{s}</span>
         </div>
       </div>
       <div className="h-1.5 rounded-full" style={{ background: 'var(--surface2)' }}>
-        <div className="h-1.5 rounded-full transition-all" style={{ width: `${pct}%`, background: color }} />
+        <div className="h-1.5 rounded-full transition-all" style={{ width: `${s}%`, background: color }} />
       </div>
     </div>
   );
@@ -109,6 +123,31 @@ export default function PropertyDetail() {
   const [areaNews, setAreaNews] = useState<AreaNews | null>(null);
   const [newsLoading, setNewsLoading] = useState(false);
   const [newsError, setNewsError] = useState<string | null>(null);
+
+  const [editingItems, setEditingItems] = useState(false);
+  const [editIncome, setEditIncome] = useState<Array<{ label: string; amount: number }>>([]);
+  const [editExpense, setEditExpense] = useState<Array<{ label: string; amount: number }>>([]);
+  const [savingItems, setSavingItems] = useState(false);
+
+  const openItemEditor = () => {
+    setEditIncome(extraction?.income_items?.map(x => ({ ...x })) ?? []);
+    setEditExpense(extraction?.expense_items?.map(x => ({ ...x })) ?? []);
+    setEditingItems(true);
+  };
+
+  const saveItems = async () => {
+    if (!extraction) return;
+    setSavingItems(true);
+    try {
+      await fetch(`/api/properties/${id}/edit`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ income_items: editIncome, expense_items: editExpense }),
+      });
+      await load();
+      setEditingItems(false);
+    } finally { setSavingItems(false); }
+  };
 
   const [equityRatio, setEquityRatio] = useState(40);
   const [loanRate, setLoanRate] = useState(1.65);
@@ -357,7 +396,45 @@ export default function PropertyDetail() {
           {/* Expenses */}
           {extraction && (
             <section className="rounded-xl border p-5" style={{ background: 'var(--surface)', borderColor: 'var(--border)' }}>
-              <h2 className="text-sm font-semibold uppercase tracking-wider mb-4" style={{ color: 'var(--muted)' }}>{t('detail.section.expenses')}</h2>
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="text-sm font-semibold uppercase tracking-wider" style={{ color: 'var(--muted)' }}>{t('detail.section.expenses')}</h2>
+                <button onClick={openItemEditor} className="text-xs px-2 py-1 rounded transition-colors hover:bg-blue-600" style={{ background: 'var(--surface2)', color: 'var(--muted)' }}>✏️ 編集</button>
+              </div>
+
+              {/* Inline editor */}
+              {editingItems && (
+                <div className="mb-4 p-3 rounded-lg border" style={{ background: 'var(--surface2)', borderColor: 'var(--border)' }}>
+                  {(['income', 'expense'] as const).map(kind => {
+                    const items = kind === 'income' ? editIncome : editExpense;
+                    const setItems = kind === 'income' ? setEditIncome : setEditExpense;
+                    const label = kind === 'income' ? '収入' : '支出';
+                    return (
+                      <div key={kind} className="mb-4">
+                        <div className="text-xs font-semibold mb-2" style={{ color: 'var(--muted)' }}>{label}項目</div>
+                        {items.map((item, i) => (
+                          <div key={i} className="flex gap-2 mb-1.5 items-center">
+                            <input value={item.label} onChange={e => { const a = [...items]; a[i] = { ...a[i], label: e.target.value }; setItems(a); }}
+                              placeholder="項目名" className="flex-1 text-xs rounded px-2 py-1 outline-none border focus:border-blue-500"
+                              style={{ background: 'var(--surface)', borderColor: 'var(--border)', color: 'var(--fg)' }} />
+                            <input type="number" value={Math.round(item.amount / 1e4)} onChange={e => { const a = [...items]; a[i] = { ...a[i], amount: Number(e.target.value) * 1e4 }; setItems(a); }}
+                              placeholder="万円" className="w-24 text-right text-xs rounded px-2 py-1 outline-none border focus:border-blue-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                              style={{ background: 'var(--surface)', borderColor: 'var(--border)', color: 'var(--fg)' }} />
+                            <span className="text-xs" style={{ color: 'var(--muted)' }}>万</span>
+                            <button onClick={() => setItems(items.filter((_, j) => j !== i))} className="text-red-400 hover:text-red-300 text-xs">✕</button>
+                          </div>
+                        ))}
+                        <button onClick={() => setItems([...items, { label: '', amount: 0 }])}
+                          className="text-xs mt-1 px-2 py-0.5 rounded" style={{ background: 'var(--surface)', color: 'var(--muted)' }}>＋ 追加</button>
+                      </div>
+                    );
+                  })}
+                  <div className="flex gap-2 mt-2">
+                    <button onClick={saveItems} disabled={savingItems}
+                      className="flex-1 py-1.5 text-xs rounded bg-blue-600 hover:bg-blue-500 disabled:opacity-50 font-medium">{savingItems ? '保存中…' : '保存'}</button>
+                    <button onClick={() => setEditingItems(false)} className="px-4 py-1.5 text-xs rounded" style={{ background: 'var(--surface2)', color: 'var(--muted)' }}>キャンセル</button>
+                  </div>
+                </div>
+              )}
 
               {/* Dynamic line items from PDF */}
               {((extraction.income_items?.length ?? 0) > 0 || (extraction.expense_items?.length ?? 0) > 0) ? (
@@ -486,9 +563,13 @@ export default function PropertyDetail() {
             <div className="text-xs uppercase tracking-wider mb-2" style={{ color: 'var(--muted)' }}>{t('detail.section.score_panel')}</div>
             {score ? (
               <>
-                <div className="text-5xl font-bold mb-1" style={{ color: scoreColor(score.overall_score) }}>
-                  {score.overall_score > 0 ? '+' : ''}{score.overall_score.toFixed(1)}
-                </div>
+                {(() => { const s = toDisplay100(score.overall_score); const v = verdict(s, score.dscr_veto); return (
+                  <>
+                    <div className="text-2xl font-bold mb-1" style={{ color: v.color }}>{v.text}</div>
+                    <div className="text-6xl font-bold mb-1" style={{ color: v.color }}>{s}</div>
+                    <div className="text-xs mb-3" style={{ color: 'var(--muted)' }}>/ 100点</div>
+                  </>
+                ); })()}
                 <div className="text-sm mb-4" style={{ color: 'var(--muted)' }}>{score.valuation_status}</div>
                 <div className="grid grid-cols-2 gap-2 text-left">
                   <MetricRow label={t('score.unlevered_irr')} value={fmtVal(score.irr, '%')} />

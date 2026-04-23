@@ -9,6 +9,7 @@ const ALLOWED_FIELDS = new Set([
   'land_right_type', 'land_lease_monthly', 'land_lease_expiry',
   'fixed_asset_tax', 'management_fee', 'other_expenses', 'total_expenses',
   'lease_expiry_risk', 'special_notes', 'extraction_confidence',
+  'income_items', 'expense_items',
 ]);
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
@@ -70,6 +71,8 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       else if (key === 'lease_expiry_risk') await sql`UPDATE property_extractions SET lease_expiry_risk = ${val as string} WHERE id = ${existing.id as string}`;
       else if (key === 'special_notes') await sql`UPDATE property_extractions SET special_notes = ${val as string} WHERE id = ${existing.id as string}`;
       else if (key === 'extraction_confidence') await sql`UPDATE property_extractions SET extraction_confidence = ${val as number} WHERE id = ${existing.id as string}`;
+      else if (key === 'income_items') await sql`UPDATE property_extractions SET income_items = ${JSON.stringify(val)} WHERE id = ${existing.id as string}`;
+      else if (key === 'expense_items') await sql`UPDATE property_extractions SET expense_items = ${JSON.stringify(val)} WHERE id = ${existing.id as string}`;
     }
   } else {
     // No extraction yet — create a minimal one
