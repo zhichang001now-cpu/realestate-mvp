@@ -1,19 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb, generateId, initSchema, migrateExtractionColumns } from '@/lib/db';
-
-const EXTRACTION_PROMPT = `Extract all data from this Japanese real estate document.
-
-STEP 1 — Convert ALL monetary values to raw JPY integers before filling JSON:
-  億円×100000000, 百万円×1000000, 万円×10000, 円×1
-  Mixed: 1億6,000万円 = 160000000. Table header "（百万円）" means all values in that column ×1000000.
-  NEVER apply two multipliers to the same number.
-  Sanity check: if cap_rate(%) given, asking_price ≈ NOI ÷ (cap_rate/100). Fix unit if mismatch ×100 or ×10000.
-
-STEP 2 — Extract into JSON:
-  令和X年=2018+X, 平成X年=1988+X, 昭和X年=1925+X. 1坪=3.3058㎡.
-  Extract both 満室想定(noi_full_occupancy) and 現況(noi_current).
-Return ONLY valid JSON with NO markdown fences:
-{"address_extracted":null,"station":null,"walk_minutes":null,"land_sqm":null,"building_sqm":null,"floors":null,"year_built":null,"usage_type":null,"structure":null,"asking_price":null,"noi_full_occupancy":null,"noi_current":null,"noi":null,"cap_rate":null,"surface_yield":null,"occupancy_rate":null,"gross_rent":null,"rent_per_sqm":null,"price_per_sqm":null,"price_per_tsubo":null,"unit_count":null,"parking_count":null,"land_right_type":null,"land_lease_monthly":null,"land_lease_expiry":null,"fixed_asset_tax":null,"management_fee":null,"other_expenses":null,"total_expenses":null,"tenant_summary":[],"lease_expiry_risk":"low","special_notes":null,"postal_code":null,"raw_all_fields":{},"extraction_confidence":0.5}`;
+import { EXTRACTION_PROMPT } from '@/lib/extraction';
 
 function parseExtractionJson(text: string): Record<string, unknown> {
   // Strip markdown code fences if present
@@ -59,7 +46,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
   const response = await client.messages.create({
     model: 'claude-sonnet-4-20250514',
-    max_tokens: 3000,
+    max_tokens: 4000,
     messages: [{ role: 'user', content: [contentBlock, { type: 'text', text: EXTRACTION_PROMPT }] }],
   });
 

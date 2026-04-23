@@ -42,7 +42,7 @@ export interface ExtractionResult {
   extraction_confidence: number;
 }
 
-const EXTRACTION_PROMPT = `You are a Japanese real estate data extraction specialist.
+export const EXTRACTION_PROMPT = `You are a Japanese real estate data extraction specialist.
 
 == STEP 1: NORMALIZE ALL MONETARY VALUES TO RAW JPY INTEGERS ==
 Before filling any JSON, scan the entire document and convert every monetary expression you find to a raw integer (yen). Use these rules — apply EXACTLY ONE multiplier per value:
@@ -118,17 +118,23 @@ Return ONLY this JSON, no markdown, no explanation:
   "tenant_summary": [],
   "lease_expiry_risk": "low|medium|high",
   "special_notes": "特記事項 full text or null",
+  "postal_code": "〒xxx-xxxx or null",
   "raw_all_fields": {"日本語フィールド名": "抽出値の文字列"},
   "extraction_confidence": number
 }
 
 income_items / expense_items rules:
-- Extract EVERY income and expense line item listed in the document as-is.
-- Use the EXACT label from the document (Japanese OK).
-- Convert amounts using Step 1 unit rules → raw JPY integers.
-- income_items: 賃料収入, 駐車場収入, 礼金, 更新料, etc.
-- expense_items: 管理費, 固定資産税, 修繕費, 損害保険料, PM費用, etc.
-- Do NOT merge or rename items. If the doc has 5 expense rows, output 5 items.
+- Scan the ENTIRE document — including 備考, 特記事項, 注記, 備考欄, and any remarks section — for income and expense data.
+- Extract EVERY income and expense line item listed anywhere in the document.
+- Use the EXACT label from the document (Japanese OK). Do NOT merge or rename items.
+- ANNUALIZE all amounts to JPY/year before storing:
+    月額 (monthly) → multiply by 12     e.g. 月額77,540円 → 930,480
+    年額 (annual)  → use as-is          e.g. 年額395,300円 → 395,300
+    If no period stated, use the value as-is.
+- income_items: include 各区画リース料 / 賃料収入 / 駐車場収入 / 礼金 / 更新料 etc.
+    For unit-based rents (e.g. "A区画(44.5㎡, 13.5坪)/月額238,700円"), create one item per unit:
+    label = "A区画リース料", amount = 238700 × 12 = 2864400
+- expense_items: include 管理費 / 修繕積立金 / 固定資産税 / 共用部清掃費 / 損害保険料 / PM費用 etc.
 - Also fill fixed_asset_tax / management_fee / other_expenses from these items for backward compatibility.`;
 
 export async function extractFromFile(filePath: string, mimeType: string): Promise<ExtractionResult> {
